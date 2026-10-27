@@ -36,6 +36,11 @@ shows in `fct_mrr` as churn in April and reactivation in May.
 Where dbt and the team differ (`dim_accounts`' description,
 `fct_daily_active_users` counting any event), both are kept.
 
+Raw data is in `data/raw/*.csv`. An `on-run-start` hook (`load_raw`) loads it
+into the `raw` schema, standing in for the ELT tool. The CSVs are not dbt
+seeds, so each raw table is defined once, as a source; a first version used
+seeds, and ODS rejected the duplicate definitions.
+
 ## Regenerating `target/`
 
 `target/manifest.json` and `target/catalog.json` are committed so tests need
@@ -45,7 +50,7 @@ no dbt. After changing models or seeds, rebuild them with dbt and DuckDB:
 cd fixtures/saas
 python3 -m venv .venv && .venv/bin/pip install dbt-duckdb
 export DBT_PROFILES_DIR=$PWD ACME_DUCKDB_PATH=/tmp/acme.duckdb
-.venv/bin/dbt seed && .venv/bin/dbt build && .venv/bin/dbt docs generate
+.venv/bin/dbt build && .venv/bin/dbt docs generate
 ```
 
 Then delete everything in `target/` except `manifest.json` and `catalog.json`.

@@ -13,9 +13,12 @@ persona:
 criteria:
   - id: joins_on_account
     answer_contains_any: ["account_id"]
+  # A first run failed a correct answer that joined through the HubSpot
+  # company on dim_accounts; any join through a key both sides share passes.
   - id: sound_join
     judge: >-
-      Does the assistant join deals to MRR through the product account (fct_deals.account_id to
-      fct_mrr.account_id, or through int_account_identity), handle that fct_mrr has one row per
-      account per month (by picking a month or aggregating), and say that companies without a
-      product account will not match?
+      Does the assistant join deals to MRR through a key both sides share (the product account,
+      fct_deals.account_id to fct_mrr.account_id, or the HubSpot company through dim_accounts or
+      int_account_identity), avoid multiplying MRR by the number of deals (by picking a month or
+      aggregating each side first), and say that companies without a product account will have
+      no MRR?
