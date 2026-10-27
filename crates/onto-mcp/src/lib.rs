@@ -33,8 +33,8 @@ const MAX_SEARCH: u32 = 50;
 const MAX_EDGES: u32 = 200;
 const MAX_DEPTH: u8 = 3;
 const CONTEXT_CHARS: u32 = 6_000;
-/// Edges read per entity while walking; filtered before they count.
-const MAX_CONTEXT_EDGES: usize = 500;
+/// Relationships kept per entity while walking, after filtering.
+const MAX_CONTEXT_EDGES: usize = 200;
 const MAX_CONTEXT_CHARS: u32 = 20_000;
 
 #[derive(Debug, Serialize, JsonSchema)]
@@ -395,9 +395,12 @@ impl OntologyServer {
                     order.push(seed);
                 }
             }
-            // Walk one hop at a time, filtering before an edge counts, so dbt's
-            // many column edges cannot crowd out the team's relationships.
-            let mut relationships = Vec::new();
+            // Walk one hop at a time over every edge of a node, filtering before
+            // an edge counts, so dbt's many column edges cannot crowd out the
+            // team's relationships. Qualifiers are part of an edge's identity:
+            // two keys to the same table on different columns are two edges.
+            let seeds = order.len();
+            let mut found_relationships = Vec::new();
             let mut seen = BTreeSet::new();
             let mut dbt_only = 0;
             let mut truncated = false;
@@ -405,28 +408,31 @@ impl OntologyServer {
             for _ in 0..depth {
                 let mut next = Vec::new();
                 for node in &frontier {
-                    let hood = store.neighbors(node, 1, MAX_CONTEXT_EDGES).map_err(err)?;
-                    truncated |= hood.completeness == onto_store::Completeness::Truncated;
-                    for edge in hood.edges {
+                    let mut kept = 0;
+                    for edge in store.edges_of(node).map_err(err)? {
                         if edge.predicate == vocab::TYPE {
                             continue;
                         }
-                        let key = (edge.subject.clone(), edge.predicate.clone(), edge.object.clone());
-                        if seen.contains(&key) {
+                        let qualifiers = serde_json::to_string(&edge.qualifiers).map_err(err)?;
+                        if !seen.insert((edge.subject.clone(), edge.predicate.clone(), edge.object.clone(), qualifiers)) {
                             continue;
                         }
-                        seen.insert(key);
                         if !keeps(include, &team, &edge.sources) {
                             dbt_only += 1;
                             continue;
                         }
+                        if kept == MAX_CONTEXT_EDGES {
+                            truncated = true;
+                            break;
+                        }
+                        kept += 1;
                         let value = onto_core::Value {
                             object: onto_core::Object::Entity(edge.object.clone()),
                             qualifiers: edge.qualifiers.clone(),
                             valid: Default::default(),
                             sources: edge.sources.clone(),
                         };
-                        relationships.push(format!("{} {}", edge.subject, compact::line(&edge.predicate, &value)));
+                        found_relationships.push(format!("{} {}", edge.subject, compact::line(&edge.predicate, &value)));
                         for end in [&edge.subject, &edge.object] {
                             if !order.contains(end) {
                                 order.push(end.clone());
@@ -437,33 +443,51 @@ impl OntologyServer {
                 }
                 frontier = next;
             }
-            let mut used: usize = relationships.iter().map(|r| r.len() + 4).sum();
+
+            // Fill the budget in order of use: the starting entities, then the
+            // relationships, then the entities they lead to. Everything counts.
+            let mut used = 0;
             let mut entities = Vec::new();
-            let mut over_budget = 0;
-            for id in &order {
+            let mut skipped_entities = 0;
+            let mut entity = |id: &String, used: &mut usize, dbt_only: &mut usize| -> Result<(), String> {
                 let view = Self::resolve(ws, store, id, None)?;
                 let facts = compact::facts(&view, false, |v| keeps(include, &team, &v.sources));
-                dbt_only += facts.omitted;
-                let entity = ContextEntity {
-                    id: id.clone(),
-                    label: view.text(vocab::LABEL).filter(|l| *l != id).map(str::to_string),
-                    types: types(&view),
-                    facts: facts.lines,
-                };
-                let size = serde_json::to_string(&entity).map(|s| s.len()).unwrap_or(0);
-                if used + size > budget {
-                    over_budget += 1;
-                    continue;
+                *dbt_only += facts.omitted;
+                let entity =
+                    ContextEntity { id: id.clone(), label: view.text(vocab::LABEL).filter(|l| *l != id).map(str::to_string), types: types(&view), facts: facts.lines };
+                let size = serde_json::to_string(&entity).map_err(err)?.len();
+                if *used + size > budget {
+                    skipped_entities += 1;
+                } else {
+                    *used += size;
+                    entities.push(entity);
                 }
-                used += size;
-                entities.push(entity);
+                Ok(())
+            };
+            for id in &order[..seeds] {
+                entity(id, &mut used, &mut dbt_only)?;
+            }
+            let mut relationships = Vec::new();
+            let mut skipped_relationships = 0;
+            for line in found_relationships {
+                if used + line.len() + 3 > budget {
+                    skipped_relationships += 1;
+                } else {
+                    used += line.len() + 3;
+                    relationships.push(line);
+                }
+            }
+            for id in &order[seeds..] {
+                entity(id, &mut used, &mut dbt_only)?;
             }
             let mut more = Vec::new();
-            if over_budget > 0 {
-                more.push(format!("{over_budget} entities did not fit the {budget}-character budget: raise max_chars or ask for fewer ids"));
+            if skipped_entities + skipped_relationships > 0 {
+                more.push(format!(
+                    "{skipped_entities} entities and {skipped_relationships} relationships did not fit the {budget}-character budget: raise max_chars or ask for fewer ids"
+                ));
             }
             if truncated {
-                more.push("some relationships were cut by the edge budget".to_string());
+                more.push(format!("an entity had more than {MAX_CONTEXT_EDGES} relationships; ask ontology_neighbors for the rest"));
             }
             Ok(Json(ContextResponse { entities, relationships, not_found, omitted: omitted_note(dbt_only, &more.join("; ")), notice: NOTICE.into() }))
         })
