@@ -12,6 +12,10 @@ under three conditions that differ in the tools it sees:
 Where the ontology's tools are visible, the agent also gets the
 `ontology-grounding` skill in its system prompt, as an agent host would load
 it. The skill ships with the ontology, so it is part of what is evaluated.
+`ods_only` gets equivalent guidance for ODS alone (`ODS_GUIDANCE` in
+`eval.rs`): look up every named model, read and cite its grain and keys, say
+what is unknown. A difference between conditions then comes from what the
+ontology knows, not from extra instructions.
 
 The question the results answer: does adding the ontology to ODS change the
 design for the better, and where? Tasks should therefore depend on knowledge

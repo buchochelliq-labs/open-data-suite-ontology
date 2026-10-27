@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use onto_testkit::agent::ModelConfig;
 use onto_testkit::eval::errors;
-use onto_testkit::eval::{Agent, Condition, Outcome, SYSTEM_PROMPT, Task, report, run_task, system_prompt};
+use onto_testkit::eval::{Agent, Condition, ODS_GUIDANCE, Outcome, SYSTEM_PROMPT, Task, report, run_task, system_prompt};
 use onto_testkit::fake_model::{error, say, serve, tool_call};
 use onto_testkit::fixture::repo_root;
 use serde_json::json;
@@ -36,8 +36,10 @@ fn every_task_file_parses_and_has_criteria() {
 }
 
 #[test]
-fn the_grounding_skill_comes_with_the_ontology_tools() {
-    assert_eq!(system_prompt(Condition::OdsOnly), SYSTEM_PROMPT, "the baseline gets no ontology guidance");
+fn each_condition_gets_matching_grounding_guidance() {
+    let baseline = system_prompt(Condition::OdsOnly);
+    assert!(baseline.starts_with(SYSTEM_PROMPT) && baseline.contains(ODS_GUIDANCE), "the baseline gets equivalent ODS guidance");
+    assert!(!baseline.contains("ontology_"), "the baseline names no ontology tools");
     for condition in [Condition::OntologyOnly, Condition::Both] {
         let prompt = system_prompt(condition);
         assert!(prompt.starts_with(SYSTEM_PROMPT));
