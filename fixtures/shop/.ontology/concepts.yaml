@@ -15,7 +15,7 @@ entities:
       - { predicate: relates_to, target: concept:order_line, qualifiers: { cardinality: many_to_one } }
 
   # Grain differs from the concept it represents: something an agent should notice.
-  - id: model:fct_orders
+  - id: model.shop.fct_orders
     type: DataAsset
     label: fct_orders
     properties:

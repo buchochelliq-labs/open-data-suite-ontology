@@ -19,7 +19,7 @@ steps:
   - call: ontology_search
     args: { query: order, entity_type: DataAsset }
     expect:
-      - { path: /hits/0/id, equals: "model:fct_orders" }
+      - { path: /hits/0/id, equals: "model.shop.fct_orders" }
 
   # Repository overrides central by configured priority; both candidates are kept.
   - call: ontology_entity
@@ -37,7 +37,7 @@ steps:
     expect:
       - { path: /completeness, equals: complete_within_depth }
       - { path: /edges, contains: "concept:product" }
-      - { path: /edges, contains: "model:fct_orders" }
+      - { path: /edges, contains: "model.shop.fct_orders" }
 
   - call: ontology_neighbors
     args: { id: "concept:order", depth: 3, max_edges: 2 }

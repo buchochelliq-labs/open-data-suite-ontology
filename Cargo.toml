@@ -5,7 +5,8 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.89"
+# OpenDataSuite crates (and rs-rich) require 1.90.
+rust-version = "1.90"
 publish = false
 repository = "https://github.com/buchochelliq-labs/open-data-suite-ontology"
 
@@ -13,6 +14,11 @@ repository = "https://github.com/buchochelliq-labs/open-data-suite-ontology"
 onto-core = { path = "crates/onto-core" }
 onto-store = { path = "crates/onto-store" }
 onto-workspace = { path = "crates/onto-workspace" }
+onto-ods = { path = "crates/onto-ods" }
+
+# OpenDataSuite: the ontology consumes its typed outputs rather than re-deriving them.
+# Pinned to a release; ODS is 0.0.x and its interfaces may change between releases.
+ods-erd = { git = "https://github.com/buchochelliq-labs/open-data-suite", tag = "v0.0.2" }
 onto-mcp = { path = "crates/onto-mcp" }
 onto-testkit = { path = "crates/onto-testkit" }
 

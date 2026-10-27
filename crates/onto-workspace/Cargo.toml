@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 onto-core.workspace = true
+onto-ods.workspace = true
 onto-store.workspace = true
 schemars.workspace = true
 serde.workspace = true

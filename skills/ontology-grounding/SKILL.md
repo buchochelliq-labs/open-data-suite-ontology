@@ -1,6 +1,6 @@
 ---
 name: ontology-grounding
-description: Ground data-model design in the layered ontology (central pack, repository facts, local overlay) through the `onto` MCP server, preserving provenance, conflicts and the propose-then-review boundary.
+description: Ground data-model design in the layered ontology (central pack, repository facts, local overlay) through the `onto` MCP server, alongside OpenDataSuite's `ods` server for project structure, preserving provenance, conflicts and the propose-then-review boundary.
 ---
 
 # Ground a design in the ontology
@@ -22,6 +22,25 @@ is connected.
 4. Use `ontology_neighbors` to see related concepts. Relationships are business
    assertions with qualifiers such as cardinality; they are not foreign keys.
    If `completeness` is `truncated`, say so and narrow the question.
+
+## Use OpenDataSuite for structure
+
+The ontology complements OpenDataSuite (ODS). ODS analyses the dbt project; the
+ontology holds what things mean and what the team agreed. When the `ods` MCP
+server is connected, ask it, not the ontology, about structure:
+
+- lineage and what a change affects: `ods_lineage`, `ods_impact`, `ods_list_opaque`;
+- keys and joins with their evidence: `ods_erd`, `ods_describe_entity`;
+- how to query safely: `ods_plan_query`; missing tests: `ods_test_gaps`.
+
+Both servers use the same ids: a dbt asset is its node id (for example
+`model.jaffle_ods.orders`) and a column is `<node id>#<column>`. Pass ids between
+them unchanged. In the ontology, asset facts from source kind `ods` carry ODS's
+evidence as `basis` (declared, tested, joined, inferred). Combine the two: for
+example, compare an asset's `primary_key` with the `grain` the team agreed for it
+or for the concept it `represents`. Unknown lineage in ODS is uncertainty, never
+"no impact". If `ods` tools are not available, say so instead of inferring
+lineage from ontology relationships, which are not lineage.
 
 ## Report disagreement and gaps
 

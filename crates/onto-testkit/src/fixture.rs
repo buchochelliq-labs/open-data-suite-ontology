@@ -11,6 +11,16 @@ pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().expect("repository root")
 }
 
+/// The `ods` executable for fixtures that use OpenDataSuite: `ONTO_ODS_BIN`, else `ods`.
+pub fn ods_binary() -> String {
+    std::env::var("ONTO_ODS_BIN").ok().filter(|v| !v.is_empty()).unwrap_or_else(|| "ods".into())
+}
+
+/// Whether OpenDataSuite can be run, so tests that need it can skip clearly.
+pub fn ods_available() -> bool {
+    Command::new(ods_binary()).arg("--version").output().is_ok_and(|o| o.status.success())
+}
+
 /// A disposable copy of a fixture workspace whose central source is a local
 /// git repository built from `packs/`, synced and locked.
 pub struct Fixture {
@@ -60,7 +70,9 @@ impl Fixture {
         let root = dir.path().join("workspace");
         copy_dir(&repo_root().join("fixtures").join(name), &root)?;
         let config = root.join("onto.toml");
-        let text = std::fs::read_to_string(&config)?.replace("REPLACED_BY_TESTKIT", &central.to_string_lossy());
+        let text = std::fs::read_to_string(&config)?
+            .replace("REPLACED_BY_TESTKIT", &central.to_string_lossy())
+            .replace("\"ODS_BIN\"", &serde_json::to_string(&ods_binary())?);
         std::fs::write(&config, text)?;
 
         let fixture = Self { _dir: dir, root, central };

@@ -144,6 +144,14 @@ impl Workspace {
                     pinned: if locked { pinned } else { None },
                 })
             }
+            SourceKind::Ods { project_dir, target_dir, command, infer } => Box::new(onto_ods::OdsSource {
+                id: source.id.clone(),
+                layer: source.layer,
+                command: command.clone(),
+                project_dir: self.root.join(project_dir),
+                target_dir: target_dir.as_ref().map(|t| self.root.join(t)),
+                infer: *infer,
+            }),
             SourceKind::Command { command, authority } => {
                 Box::new(CommandSource { id: source.id.clone(), layer: source.layer, command: command.clone(), cwd: self.root.clone(), authority: *authority })
             }

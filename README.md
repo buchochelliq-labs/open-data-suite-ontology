@@ -6,10 +6,12 @@ consumed from git today and from a hosted service later) with **repository**
 facts and a **local** overlay. Then it serves the result to agents over MCP,
 with every value traceable to its source and every disagreement kept visible.
 
-It started as a Rust port of the context layer in
-[`dbt-skills`](https://github.com/buchochelliq-labs/dbt-skills). The core is
-domain-agnostic; dbt becomes one source and one pack. See
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
+It complements [OpenDataSuite](https://github.com/buchochelliq-labs/open-data-suite):
+ODS understands the dbt project (assets, keys with evidence, lineage, impact);
+the ontology adds meaning, agreed facts and a review path, using the same ids.
+See [docs/ECOSYSTEM.md](docs/ECOSYSTEM.md). It started as a Rust port of the
+context layer in [`dbt-skills`](https://github.com/buchochelliq-labs/dbt-skills);
+see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 [docs/MIGRATION.md](docs/MIGRATION.md).
 
 ## Quick start
@@ -41,6 +43,16 @@ onto proposals accept <digest>   # appends to .ontology/accepted.yaml; you commi
 
 In CI, `onto sync --locked` uses the commits pinned in `onto.lock`.
 
+For a dbt project, add OpenDataSuite as a source (`pip install opendatasuite`)
+and run `ods mcp` next to `onto mcp`:
+
+```toml
+[[source]]
+id = "dbt"
+layer = "repository"
+kind = "ods"
+```
+
 ## Layout
 
 | Path | What |
@@ -48,6 +60,7 @@ In CI, `onto sync --locked` uses the commits pinned in `onto.lock`.
 | `crates/onto-core` | Claims, provenance, authority, layers, the `Source` trait, conflict resolution |
 | `crates/onto-store` | SQLite store: generations per source, FTS5 search, bounded traversal, proposals |
 | `crates/onto-workspace` | `onto.toml`, pack format, git/pack/command sources, `onto.lock`, sync, proposal review |
+| `crates/onto-ods` | OpenDataSuite as a source: dbt assets, columns, keys and relationships with ODS's evidence |
 | `crates/onto-mcp` | MCP server (`rmcp`, stdio) |
 | `crates/onto-cli` | The `onto` binary |
 | `crates/onto-testkit` | Fixtures, scripted scenarios, replay, model-driven episodes |

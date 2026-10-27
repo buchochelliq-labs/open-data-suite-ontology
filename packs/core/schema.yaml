@@ -56,3 +56,38 @@ predicates:
     label: applies to
     definition: Scope of a standard or decision.
     cardinality: many
+
+  # Physical structure. OpenDataSuite supplies these for dbt projects (onto-ods);
+  # subjects are ODS node ids, columns are `<node id>#<column>`.
+  - id: asset_kind
+    label: asset kind
+    definition: table, view, seed, snapshot or source.
+    cardinality: one
+    range: literal
+  - id: relation
+    label: relation
+    definition: Fully qualified name to query the asset by.
+    cardinality: one
+    range: literal
+  - id: has_column
+    label: has column
+    cardinality: many
+    range: Attribute
+  - id: data_type
+    label: data type
+    cardinality: one
+    range: literal
+  - id: primary_key
+    label: primary key
+    definition: Columns that identify a row. The `basis` qualifier says how ODS knows (declared, tested, joined, inferred).
+    cardinality: one
+    range: literal
+  - id: unique_key
+    label: unique key
+    cardinality: many
+    range: literal
+  - id: references
+    label: references
+    definition: A key relationship between assets (ODS ERD), qualified with columns, cardinality and basis. Not lineage.
+    cardinality: many
+    range: DataAsset

@@ -976,6 +976,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ods-erd"
+version = "0.0.2"
+source = "git+https://github.com/buchochelliq-labs/open-data-suite?tag=v0.0.2#f18ed9aad5e5121509fd4b649d336990ff605000"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1029,6 +1038,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "onto-ods"
+version = "0.1.0"
+dependencies = [
+ "ods-erd",
+ "onto-core",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "onto-store"
 version = "0.1.0"
 dependencies = [
@@ -1063,6 +1082,7 @@ name = "onto-workspace"
 version = "0.1.0"
 dependencies = [
  "onto-core",
+ "onto-ods",
  "onto-store",
  "schemars",
  "serde",

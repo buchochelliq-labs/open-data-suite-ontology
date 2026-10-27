@@ -55,6 +55,22 @@ pub enum SourceKind {
         #[serde(default = "default_path")]
         path: String,
     },
+    /// A dbt project as OpenDataSuite understands it: assets, columns, keys and
+    /// relationships with ODS's evidence (`ods erd generate`).
+    Ods {
+        /// dbt project directory, relative to the workspace root.
+        #[serde(default = "default_path")]
+        project_dir: String,
+        /// dbt target directory, relative to the workspace root; ODS's default when unset.
+        #[serde(default)]
+        target_dir: Option<String>,
+        /// The `ods` executable (and leading arguments).
+        #[serde(default = "default_ods_command")]
+        command: Vec<String>,
+        /// Include naming-convention keys, recorded as `inferred`.
+        #[serde(default)]
+        infer: bool,
+    },
     /// Any provider: a command that prints JSON-lines records on stdout.
     Command {
         command: Vec<String>,
@@ -68,6 +84,7 @@ impl SourceKind {
         match self {
             SourceKind::Pack { .. } => "pack",
             SourceKind::Git { .. } => "git",
+            SourceKind::Ods { .. } => "ods",
             SourceKind::Command { .. } => "command",
         }
     }
@@ -79,6 +96,10 @@ fn default_rev() -> String {
 
 fn default_path() -> String {
     ".".into()
+}
+
+fn default_ods_command() -> Vec<String> {
+    vec!["ods".into()]
 }
 
 fn default_command_authority() -> Authority {
@@ -111,6 +132,12 @@ mod tests {
             path = ".ontology"
 
             [[source]]
+            id = "dbt"
+            layer = "repository"
+            kind = "ods"
+            target_dir = "target"
+
+            [[source]]
             id = "catalog"
             layer = "repository"
             kind = "command"
@@ -120,6 +147,7 @@ mod tests {
         .unwrap();
         assert_eq!(config.resolution.mode, ResolutionMode::Preserve);
         assert!(matches!(&config.sources[0].kind, SourceKind::Git { rev, .. } if rev == "main"));
-        assert!(matches!(config.sources[2].kind, SourceKind::Command { authority: Authority::Observed, .. }));
+        assert!(matches!(&config.sources[2].kind, SourceKind::Ods { command, infer: false, project_dir, .. } if command == &["ods"] && project_dir == "."));
+        assert!(matches!(config.sources[3].kind, SourceKind::Command { authority: Authority::Observed, .. }));
     }
 }

@@ -32,6 +32,33 @@ async fn skills_and_agents_match_the_server() {
     assert!(undocumented.is_empty(), "SKILL.md does not cover: {undocumented:?}");
 }
 
+/// OpenDataSuite's MCP tools at the pinned release (ODS ADR-0010, v0.0.2).
+const ODS_TOOLS: &[&str] = &[
+    "ods_project_summary",
+    "ods_search",
+    "ods_get_node",
+    "ods_lineage",
+    "ods_impact",
+    "ods_erd",
+    "ods_test_gaps",
+    "ods_list_opaque",
+    "ods_state_policies",
+    "ods_compare_observed",
+    "ods_find_data",
+    "ods_describe_entity",
+    "ods_plan_query",
+];
+
+#[test]
+fn ods_tools_named_in_the_skill_exist_in_ods() {
+    let skill = std::fs::read_to_string(repo_root().join("skills/ontology-grounding/SKILL.md")).unwrap();
+    let named: BTreeSet<&str> = skill.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).filter(|w| w.starts_with("ods_")).collect();
+    assert!(!named.is_empty());
+    for tool in named {
+        assert!(ODS_TOOLS.contains(&tool), "SKILL.md names `{tool}`, which ODS v0.0.2 does not serve");
+    }
+}
+
 #[tokio::test]
 async fn only_propose_is_not_read_only() {
     let fixture = Fixture::new("shop").unwrap();
