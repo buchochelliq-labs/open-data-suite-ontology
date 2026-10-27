@@ -268,7 +268,9 @@ impl Store {
     /// Breadth-first walk over entity-valued claims in both directions.
     /// Stops once `max_edges` distinct edges are collected and reports truncation.
     pub fn neighbors(&self, root: &str, depth: usize, max_edges: usize) -> Result<Neighborhood> {
-        let mut edges: BTreeMap<(String, String, String), Edge> = BTreeMap::new();
+        // Qualifiers are part of an edge's identity: two foreign keys to the same
+        // table on different columns are two relationships, not one.
+        let mut edges: BTreeMap<(String, String, String, String), Edge> = BTreeMap::new();
         let mut seen: HashSet<String> = HashSet::from([root.to_string()]);
         let mut queue = VecDeque::from([(root.to_string(), 0usize)]);
         let mut completeness = Completeness::CompleteWithinDepth;
@@ -287,7 +289,7 @@ impl Store {
                 }
                 let Claim { subject, predicate, object, qualifiers, .. } = record.claim;
                 let target = object.entity().expect("filtered to entity objects").to_string();
-                let key = (subject.clone(), predicate.clone(), target.clone());
+                let key = (subject.clone(), predicate.clone(), target.clone(), serde_json::to_string(&qualifiers)?);
                 if !edges.contains_key(&key) && edges.len() >= max_edges {
                     completeness = Completeness::Truncated;
                     break 'walk;
@@ -462,6 +464,20 @@ mod tests {
         let store = Store::open(&dir).unwrap();
         assert_eq!(store.search("customers", 5).unwrap().len(), 1);
         let _ = std::fs::remove_file(&dir);
+    }
+
+    #[test]
+    fn edges_with_different_qualifiers_stay_distinct() {
+        let mut store = Store::open_in_memory().unwrap();
+        let fk = |column: &str| {
+            let mut claim = Claim::relation("orders", "references", "customers");
+            claim.qualifiers.insert("from_columns".into(), serde_json::json!([column]));
+            claim
+        };
+        store.replace_source(&state("core"), &[rec(fk("billing_customer_id"), "core"), rec(fk("shipping_customer_id"), "core")]).unwrap();
+        let around = store.neighbors("orders", 1, 10).unwrap();
+        assert_eq!(around.edges.len(), 2, "{:?}", around.edges);
+        assert!(around.edges.iter().all(|e| e.sources.len() == 1));
     }
 
     #[test]

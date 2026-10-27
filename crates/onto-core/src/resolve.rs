@@ -31,8 +31,12 @@ pub struct Schema {
 }
 
 impl Schema {
-    pub fn from_records<'a>(records: impl IntoIterator<Item = &'a Record>) -> Self {
-        let mut declared = HashMap::new();
+    /// Cardinality declarations resolved like any other value: agreement is
+    /// used as is; disagreement goes to the configured source priority; with no
+    /// winner the predicate is single-valued, so conflicts stay visible instead
+    /// of being hidden as multiple values. Never depends on record order.
+    pub fn resolve<'a>(records: impl IntoIterator<Item = &'a Record>, resolver: &Resolver) -> Self {
+        let mut by_predicate: BTreeMap<&str, Vec<(usize, Cardinality)>> = BTreeMap::new();
         for record in records {
             if record.claim.predicate != vocab::CARDINALITY || record.provenance.authority == Authority::Proposed {
                 continue;
@@ -42,8 +46,26 @@ impl Schema {
                 Some("many") => Cardinality::Many,
                 _ => continue,
             };
-            declared.insert(record.claim.subject.clone(), cardinality);
+            by_predicate.entry(record.claim.subject.as_str()).or_default().push((resolver.rank(&record.provenance.source_id), cardinality));
         }
+        let declared = by_predicate
+            .into_iter()
+            .map(|(predicate, declarations)| {
+                let first = declarations[0].1;
+                let cardinality = if declarations.iter().all(|(_, c)| *c == first) {
+                    first
+                } else {
+                    let best = declarations.iter().map(|(rank, _)| *rank).min().unwrap_or(usize::MAX);
+                    let mut winners = declarations.iter().filter(|(rank, _)| *rank == best).map(|(_, c)| *c);
+                    let winner = winners.next().filter(|c| winners.all(|other| other == *c));
+                    match (resolver.mode, winner) {
+                        (ResolutionMode::Priority, Some(c)) if best < resolver.priority.len() => c,
+                        _ => Cardinality::One,
+                    }
+                };
+                (predicate.to_string(), cardinality)
+            })
+            .collect();
         Self { declared }
     }
 
@@ -290,8 +312,22 @@ mod tests {
         assert_eq!(view.entities("places").len(), 2);
 
         let schema_records = [rec(Claim::literal("places", vocab::CARDINALITY, "one"), "central", Authority::Declared)];
-        let schema = Schema::from_records(&schema_records);
+        let schema = Schema::resolve(&schema_records, &Resolver::default());
         assert!(Resolver::default().resolve_entity("concept:customer", &records, &schema).has_unresolved_conflict());
+    }
+
+    #[test]
+    fn competing_cardinality_declarations_follow_priority_not_order() {
+        let decl = |source: &str, value: &str| rec(Claim::literal("places", vocab::CARDINALITY, value), source, Authority::Declared);
+        let priority = Resolver { priority: vec!["repo".into(), "central".into()], ..Default::default() };
+        let object = Object::Entity("x".into());
+        for records in [[decl("central", "many"), decl("repo", "one")], [decl("repo", "one"), decl("central", "many")]] {
+            assert_eq!(Schema::resolve(&records, &priority).cardinality("places", &object), Cardinality::One);
+        }
+        // Without a priority winner, the conservative answer keeps conflicts visible.
+        let preserve = Resolver { mode: ResolutionMode::Preserve, ..priority.clone() };
+        assert_eq!(Schema::resolve(&[decl("repo", "many"), decl("central", "one")], &preserve).cardinality("places", &object), Cardinality::One);
+        assert_eq!(Schema::resolve(&[decl("repo", "many"), decl("central", "many")], &preserve).cardinality("places", &object), Cardinality::Many);
     }
 
     #[test]
