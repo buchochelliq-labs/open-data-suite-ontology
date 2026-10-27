@@ -502,7 +502,11 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, cast: Cast<
         }
     }
 
-    result.exploration = Exploration::of(&transcript);
+    let cap = match agent {
+        Agent::Api(config) => Some(config.max_tool_result_chars),
+        Agent::ClaudeCode(_) => None,
+    };
+    result.exploration = Exploration::of(&transcript, cap);
     let report = invariants::check(&transcript, &before, &fixture.repository_files()?);
     result.violations = report.violations;
     result.warnings.extend(report.warnings);
@@ -523,7 +527,7 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, cast: Cast<
 pub struct Exploration {
     /// Distinct entities and models the agent looked up by id or name.
     pub entities: usize,
-    /// Characters of tool output the agent received.
+    /// Characters of tool output the agent received, after any truncation.
     pub chars_read: usize,
     /// Searches that found nothing, as `tool: query`; vocabulary misses show here.
     pub empty_searches: Vec<String>,
@@ -532,14 +536,17 @@ pub struct Exploration {
 const SEARCH_TOOLS: [&str; 3] = ["ontology_search", "ods_search", "ods_find_data"];
 
 impl Exploration {
-    pub fn of(transcript: &Transcript) -> Self {
+    /// Measure `transcript`. `cap` is the agent loop's limit on each tool
+    /// result (results are recorded in full but delivered truncated).
+    pub fn of(transcript: &Transcript, cap: Option<usize>) -> Self {
         let mut entities = std::collections::BTreeSet::new();
         let mut out = Exploration::default();
         for (tool, arguments, ok, result) in transcript.tool_calls() {
-            out.chars_read += match result {
-                Value::String(s) => s.len(),
-                other => other.to_string().len(),
+            let delivered = match result {
+                Value::String(s) => s.chars().count(),
+                other => other.to_string().chars().count(),
             };
+            out.chars_read += cap.map_or(delivered, |cap| delivered.min(cap));
             for key in ["id", "entity", "from", "to"] {
                 if let Some(id) = arguments[key].as_str() {
                     entities.insert(id.to_string());

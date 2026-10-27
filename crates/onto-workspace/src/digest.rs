@@ -137,18 +137,20 @@ impl Renderer<'_> {
             out.push_str(&format!("  - also called: {}\n", aliases.join(", ")));
         }
         for property in &view.properties {
+            let predicate = property.predicate.strip_prefix("onto:").unwrap_or(&property.predicate);
             if let Some(conflict) = &property.conflict {
                 out.push_str(&self.conflict(property, conflict));
+            }
+            // Proposals are listed for every predicate, including those shown in the header line.
+            for value in &property.pending {
+                out.push_str(&format!("  - pending proposal, not a fact: {predicate} = {}\n", object(&value.object)));
             }
             if [vocab::LABEL, vocab::DEFINITION, vocab::ALIAS, vocab::TYPE].contains(&property.predicate.as_str()) {
                 continue;
             }
             for value in property.values.iter().filter(|v| self.is_team(v)) {
                 let arrow = if value.object.entity().is_some() { " →" } else { ":" };
-                out.push_str(&format!("  - {}{arrow} {}{} {}\n", property.predicate, object(&value.object), qualifiers(value), cite(value)));
-            }
-            for value in &property.pending {
-                out.push_str(&format!("  - pending proposal, not a fact: {} = {}\n", property.predicate, object(&value.object)));
+                out.push_str(&format!("  - {predicate}{arrow} {}{} {}\n", object(&value.object), qualifiers(value), cite(value)));
             }
         }
         out

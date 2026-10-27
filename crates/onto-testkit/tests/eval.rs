@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use onto_testkit::agent::ModelConfig;
 use onto_testkit::eval::errors;
-use onto_testkit::eval::{Agent, Cast, Condition, ODS_GUIDANCE, Outcome, SYSTEM_PROMPT, Task, report, run_task, system_prompt};
+use onto_testkit::eval::{Agent, Cast, Condition, Exploration, ODS_GUIDANCE, Outcome, SYSTEM_PROMPT, Task, report, run_task, system_prompt};
 use onto_testkit::fake_model::{error, say, serve, tool_call};
 use onto_testkit::fixture::repo_root;
 use serde_json::json;
@@ -177,4 +177,20 @@ fn new_tasks_need_the_ontology_by_construction() {
     let manifest = std::fs::read_to_string(repo_root().join("fixtures/jaffle/target/manifest.json")).unwrap();
     assert!(!pack.lines().filter(|l| !l.trim_start().starts_with('#')).any(|l| l.to_lowercase().contains("revenue")));
     assert!(!manifest.to_lowercase().contains("revenue"));
+}
+
+#[test]
+fn characters_read_count_what_the_agent_received() {
+    use onto_testkit::{Event, Transcript};
+    let transcript = Transcript {
+        events: vec![
+            Event::ToolCall { tool: "ontology_entity".into(), arguments: json!({ "id": "a" }), ok: true, result: json!("x".repeat(10_000)) },
+            Event::ToolCall { tool: "ontology_search".into(), arguments: json!({ "query": "revenue" }), ok: true, result: json!({ "hits": [] }) },
+        ],
+    };
+    let capped = Exploration::of(&transcript, Some(4_000));
+    assert_eq!(capped.chars_read, 4_000 + json!({ "hits": [] }).to_string().len(), "a truncated result counts as delivered");
+    assert_eq!(Exploration::of(&transcript, None).chars_read, 10_000 + 11);
+    assert_eq!(capped.entities, 1);
+    assert_eq!(capped.empty_searches, vec!["ontology_search: revenue".to_string()]);
 }
