@@ -235,19 +235,19 @@ criteria:
 #[tokio::test]
 async fn a_fact_accepted_in_one_session_is_used_in_the_next() {
     let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
-    let task = tasks.iter().find(|t| t.name == "rank-grain-carries-over").unwrap();
-    let rank = "model.jaffle_ods.customer_order_rank";
+    let task = tasks.iter().find(|t| t.name == "snapshot-grain-carries-over").unwrap();
+    let rank = "model.jaffle_ods.customers_snapshot_view";
     // One scripted model plays the agent in both sessions, in order.
     let (agent_url, _) = serve(vec![
         // Session 1: propose, then wait for the person to accept.
-        tool_call("1", "ontology_propose", json!({ "subject": rank, "predicate": "grain", "object": { "literal": "one row per customer order" }, "rationale": "The model's owner stated it in this session." })),
-        say("I proposed grain = one row per customer order. It is pending until you accept it with onto proposals accept."),
+        tool_call("1", "ontology_propose", json!({ "subject": rank, "predicate": "grain", "object": { "literal": "one row per customer per snapshot day" }, "rationale": "The model's owner stated it in this session." })),
+        say("I proposed grain = one row per customer per snapshot day. It is pending until you accept it with onto proposals accept."),
         say("It is still pending your review."),
         say("Thanks, it is accepted."),
         say("You're welcome."),
         // Session 2: a fresh agent looks the model up.
         tool_call("2", "ontology_entity", json!({ "id": rank })),
-        say("customer_order_rank is one row per customer order [repo reviewed by scripted-person]."),
+        say("customers_snapshot_view is one row per customer per snapshot day [repo reviewed by scripted-person]."),
         say("Glad it helps."),
     ])
     .await;
@@ -268,7 +268,10 @@ async fn a_fact_accepted_in_one_session_is_used_in_the_next() {
         Event::ToolCall { tool, result, .. } if tool == "ontology_entity" => Some(result.to_string()),
         _ => None,
     });
-    assert!(looked_up.unwrap().contains("grain: one row per customer order [repo reviewed by scripted-person]"), "session 2 reads the accepted fact");
+    assert!(
+        looked_up.unwrap().contains("grain: one row per customer per snapshot day [repo reviewed by scripted-person]"),
+        "session 2 reads the accepted fact"
+    );
 }
 
 #[test]
