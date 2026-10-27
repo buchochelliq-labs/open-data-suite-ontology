@@ -1,0 +1,57 @@
+name: Evaluate (does the ontology help?)
+
+# Runs evals/*.yaml with a capable model under three conditions: OpenDataSuite
+# tools only, ontology tools only, and both. Manual, because it calls a paid
+# model. Configure the repository secret ONTO_LLM_API_KEY (and optionally
+# ONTO_JUDGE_API_KEY) first.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: OpenAI-compatible base URL (including /v1)
+        required: true
+      model:
+        description: Model for the agent
+        required: true
+      judge_model:
+        description: Model for judged criteria (defaults to the agent model)
+        required: false
+      runs:
+        description: Repetitions per task and condition
+        default: "3"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install opendatasuite==0.0.2
+
+      - name: Run evaluation
+        env:
+          ONTO_LLM_BASE_URL: ${{ inputs.base_url }}
+          ONTO_LLM_MODEL: ${{ inputs.model }}
+          ONTO_LLM_API_KEY: ${{ secrets.ONTO_LLM_API_KEY }}
+          ONTO_JUDGE_MODEL: ${{ inputs.judge_model }}
+          ONTO_JUDGE_API_KEY: ${{ secrets.ONTO_JUDGE_API_KEY }}
+        run: cargo run -p onto-testkit --features llm --bin onto-eval -- --runs "${{ inputs.runs }}"
+
+      - name: Summary
+        if: always()
+        run: cat target/eval/report.md >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-${{ github.run_id }}
+          path: target/eval/

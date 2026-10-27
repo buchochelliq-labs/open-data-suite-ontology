@@ -3,52 +3,10 @@
 
 #![cfg(feature = "llm")]
 
-use std::sync::{Arc, Mutex};
-
 use onto_testkit::agent::{ModelConfig, Reply, ScriptedHuman, run_episode};
+use onto_testkit::fake_model::{serve as fake_model, tool_call};
 use onto_testkit::{Event, Fixture, Session, invariants};
-use serde_json::{Value, json};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
-
-fn tool_call(id: &str, name: &str, args: Value) -> Value {
-    json!({ "role": "assistant", "content": null, "tool_calls": [{ "id": id, "type": "function", "function": { "name": name, "arguments": args.to_string() } }] })
-}
-
-/// Serve canned assistant messages in order; record every request body.
-async fn fake_model(responses: Vec<Value>) -> (String, Arc<Mutex<Vec<Value>>>) {
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let url = format!("http://{}/v1", listener.local_addr().unwrap());
-    let seen = Arc::new(Mutex::new(Vec::new()));
-    let log = seen.clone();
-    tokio::spawn(async move {
-        for message in responses {
-            let (mut socket, _) = listener.accept().await.unwrap();
-            let mut buf = Vec::new();
-            let body = loop {
-                let mut chunk = [0u8; 8192];
-                let n = socket.read(&mut chunk).await.unwrap();
-                buf.extend_from_slice(&chunk[..n]);
-                let text = String::from_utf8_lossy(&buf).to_string();
-                if let Some(split) = text.find("\r\n\r\n") {
-                    let length: usize = text[..split]
-                        .lines()
-                        .find_map(|l| l.to_ascii_lowercase().strip_prefix("content-length:").map(|v| v.trim().parse().unwrap()))
-                        .unwrap_or(0);
-                    if buf.len() >= split + 4 + length {
-                        break serde_json::from_slice::<Value>(&buf[split + 4..split + 4 + length]).unwrap();
-                    }
-                }
-            };
-            log.lock().unwrap().push(body);
-            let payload = json!({ "choices": [{ "message": message }] }).to_string();
-            let response =
-                format!("HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{payload}", payload.len());
-            socket.write_all(response.as_bytes()).await.unwrap();
-        }
-    });
-    (url, seen)
-}
+use serde_json::json;
 
 #[tokio::test]
 async fn model_loop_drives_tools_and_respects_the_human() {

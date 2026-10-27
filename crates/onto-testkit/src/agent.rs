@@ -84,10 +84,13 @@ fn truncate(text: String, max: usize) -> String {
     format!("{cut}\n[truncated: narrow the request for more]")
 }
 
-async fn complete(http: &reqwest::Client, config: &ModelConfig, messages: &[Value], tools: &[Value]) -> Result<Value> {
-    let mut request = http
-        .post(format!("{}/chat/completions", config.base_url.trim_end_matches('/')))
-        .json(&json!({ "model": config.model, "messages": messages, "tools": tools, "temperature": 0, "seed": 0 }));
+/// One chat completion; returns the assistant message. Tools are omitted when empty.
+pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messages: &[Value], tools: &[Value]) -> Result<Value> {
+    let mut body = json!({ "model": config.model, "messages": messages, "temperature": 0 });
+    if !tools.is_empty() {
+        body["tools"] = json!(tools);
+    }
+    let mut request = http.post(format!("{}/chat/completions", config.base_url.trim_end_matches('/'))).json(&body);
     if let Some(key) = &config.api_key {
         request = request.bearer_auth(key);
     }

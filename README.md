@@ -87,6 +87,11 @@ Three tiers share one session and transcript format:
 3. **Record and replay**: transcripts from model runs are JSON lines that
    replay deterministically as regression tests.
 
+Separately, [`evals/`](evals/README.md) measures whether the ontology helps: the
+same modelling tasks run with OpenDataSuite's tools only, the ontology's only,
+and both, scored by checks and a judge model (`onto-eval`, or the manual
+`Evaluate` workflow).
+
 ## Status
 
 First slice. See [docs/MIGRATION.md](docs/MIGRATION.md) for what has been ported

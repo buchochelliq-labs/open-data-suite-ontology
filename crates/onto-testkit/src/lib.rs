@@ -8,6 +8,10 @@
 
 #[cfg(feature = "llm")]
 pub mod agent;
+#[cfg(feature = "llm")]
+pub mod eval;
+#[cfg(feature = "llm")]
+pub mod fake_model;
 pub mod fixture;
 pub mod invariants;
 pub mod scenario;

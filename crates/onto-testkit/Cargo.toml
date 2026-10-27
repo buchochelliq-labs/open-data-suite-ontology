@@ -8,10 +8,11 @@ publish.workspace = true
 
 [features]
 # Drive episodes with a model behind an OpenAI-compatible endpoint (llama.cpp, vLLM, hosted).
-llm = ["dep:reqwest"]
+llm = ["dep:reqwest", "dep:clap"]
 
 [dependencies]
 anyhow.workspace = true
+clap = { workspace = true, optional = true }
 onto-core.workspace = true
 onto-mcp.workspace = true
 onto-store.workspace = true
@@ -26,4 +27,9 @@ tokio.workspace = true
 
 [[test]]
 name = "llm_episode"
+required-features = ["llm"]
+
+[[bin]]
+name = "onto-eval"
+path = "src/bin/onto_eval.rs"
 required-features = ["llm"]

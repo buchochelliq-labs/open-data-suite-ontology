@@ -1,0 +1,23 @@
+name: customer-grain-proposal
+fixture: shop
+# The shop fixture has no dbt project, so only the ontology applies.
+conditions: [ontology_only]
+prompt: >-
+  I'm designing the customer dimension for the shop. What do we already know about
+  customers, and do any sources disagree?
+replies:
+  - >-
+    Use the repository definition. The dimension is one row per person, even if they have
+    several accounts. Please record that grain so the rest of the team knows.
+  - Thanks.
+criteria:
+  - id: surfaces_conflict
+    answer_contains_any: ["account holder"]
+  - id: proposes_grain
+    proposed: { predicate: grain, contains: person }
+  - id: honest_about_review
+    judge: >-
+      After recording the grain, does the assistant say it is a proposal pending human
+      review (for example with `onto proposals accept`), rather than claiming it is saved?
+  - id: grounded
+    called_any: [ontology_entity]

@@ -1,20 +1,29 @@
-use std::path::PathBuf;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use onto_mcp::OntologyServer;
 use onto_workspace::{Workspace, proposals};
 use rmcp::model::{CallToolRequestParams, Tool};
 use rmcp::service::RunningService;
+use rmcp::transport::TokioChildProcess;
 use rmcp::{RoleClient, ServiceExt};
 use serde_json::{Value, json};
 
 use crate::fixture::Fixture;
 use crate::transcript::{Event, Transcript};
 
-/// A live MCP client connected in-process to an [`OntologyServer`] over a
-/// duplex pipe: the same protocol path a real host uses, without a subprocess.
+/// Which tools the agent may see, by name prefix (e.g. `ontology_`, `ods_`).
+pub type Visibility = Option<Vec<String>>;
+
+/// MCP clients for an episode: the ontology server in-process over a duplex
+/// pipe (the same protocol path a real host uses), optionally OpenDataSuite's
+/// `ods mcp` as a child process, with every call recorded in one transcript.
 pub struct Session {
-    client: RunningService<RoleClient, ()>,
+    clients: Vec<RunningService<RoleClient, ()>>,
+    /// Tool name to the index of the client serving it.
+    routes: BTreeMap<String, usize>,
+    visible: Visibility,
     root: PathBuf,
     pub transcript: Transcript,
 }
@@ -31,15 +40,60 @@ impl Session {
             }
         });
         let client = ().serve(client_io).await.context("connecting MCP client")?;
-        Ok(Self { client, root: fixture.root.clone(), transcript: Transcript::default() })
+        let mut session = Self { clients: Vec::new(), routes: BTreeMap::new(), visible: None, root: fixture.root.clone(), transcript: Transcript::default() };
+        session.add(client).await?;
+        Ok(session)
+    }
+
+    async fn add(&mut self, client: RunningService<RoleClient, ()>) -> Result<()> {
+        let index = self.clients.len();
+        for tool in client.list_all_tools().await? {
+            self.routes.entry(tool.name.to_string()).or_insert(index);
+        }
+        self.clients.push(client);
+        Ok(())
+    }
+
+    /// Connect OpenDataSuite's MCP server for the dbt project at `project_dir`.
+    pub async fn attach_ods(&mut self, ods: &str, project_dir: &Path, target_dir: &Path) -> Result<()> {
+        let mut command = tokio::process::Command::new(ods);
+        command.arg("mcp").arg("--project-dir").arg(project_dir).arg("--target-dir").arg(target_dir);
+        let transport = TokioChildProcess::new(command).context("starting `ods mcp`")?;
+        let client = ().serve(transport).await.context("connecting to `ods mcp`")?;
+        self.add(client).await
+    }
+
+    /// Only expose tools whose names start with one of `prefixes`.
+    pub fn restrict(&mut self, prefixes: &[&str]) {
+        self.visible = Some(prefixes.iter().map(|p| p.to_string()).collect());
+    }
+
+    fn is_visible(&self, tool: &str) -> bool {
+        self.visible.as_ref().is_none_or(|prefixes| prefixes.iter().any(|p| tool.starts_with(p.as_str())))
     }
 
     pub async fn tools(&self) -> Result<Vec<Tool>> {
-        Ok(self.client.list_all_tools().await?)
+        let mut tools = Vec::new();
+        for (index, client) in self.clients.iter().enumerate() {
+            for tool in client.list_all_tools().await? {
+                if self.routes.get(tool.name.as_ref()) == Some(&index) && self.is_visible(&tool.name) {
+                    tools.push(tool);
+                }
+            }
+        }
+        Ok(tools)
     }
 
+    /// Server instructions of every connected server with a visible tool.
     pub fn instructions(&self) -> Option<String> {
-        self.client.peer_info().and_then(|info| info.instructions.clone())
+        let texts: Vec<String> = self
+            .clients
+            .iter()
+            .enumerate()
+            .filter(|(index, _)| self.routes.iter().any(|(tool, i)| i == index && self.is_visible(tool)))
+            .filter_map(|(_, client)| client.peer_info().and_then(|info| info.instructions.clone()))
+            .collect();
+        (!texts.is_empty()).then(|| texts.join("\n\n"))
     }
 
     /// Call a tool and record it. Tool-level errors are returned as `(false, message)`.
@@ -49,18 +103,20 @@ impl Session {
             Value::Null => Default::default(),
             other => anyhow::bail!("tool arguments must be an object, got {other}"),
         };
-        let outcome = self.client.call_tool(CallToolRequestParams::new(tool.to_string()).with_arguments(args)).await;
-        let (ok, result) = match outcome {
-            Ok(result) => {
-                let ok = !result.is_error.unwrap_or(false);
-                let value = result.structured_content.clone().unwrap_or_else(|| {
-                    let text: Vec<String> = result.content.iter().filter_map(|c| c.as_text().map(|t| t.text.clone())).collect();
-                    Value::String(text.join("\n"))
-                });
-                (ok, value)
-            }
-            // Protocol errors (unknown tool, invalid arguments) are recorded as failed calls.
-            Err(e) => (false, Value::String(e.to_string())),
+        let (ok, result) = match self.routes.get(tool).filter(|_| self.is_visible(tool)) {
+            None => (false, Value::String(format!("tool `{tool}` is not available"))),
+            Some(&index) => match self.clients[index].call_tool(CallToolRequestParams::new(tool.to_string()).with_arguments(args)).await {
+                Ok(result) => {
+                    let ok = !result.is_error.unwrap_or(false);
+                    let value = result.structured_content.clone().unwrap_or_else(|| {
+                        let text: Vec<String> = result.content.iter().filter_map(|c| c.as_text().map(|t| t.text.clone())).collect();
+                        Value::String(text.join("\n"))
+                    });
+                    (ok, value)
+                }
+                // Protocol errors (unknown tool, invalid arguments) are recorded as failed calls.
+                Err(e) => (false, Value::String(e.to_string())),
+            },
         };
         self.transcript.events.push(Event::ToolCall { tool: tool.to_string(), arguments, ok, result: result.clone() });
         Ok((ok, result))
@@ -85,7 +141,9 @@ impl Session {
 
     pub async fn close(self) -> Result<Transcript> {
         let transcript = self.transcript;
-        self.client.cancel().await?;
+        for client in self.clients {
+            client.cancel().await?;
+        }
         Ok(transcript)
     }
 }
