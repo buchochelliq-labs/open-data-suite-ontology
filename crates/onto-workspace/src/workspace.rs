@@ -124,7 +124,7 @@ impl Workspace {
 
     pub fn schema(&self, store: &Store) -> Result<Schema> {
         let records: Vec<Record> = store.records_with_predicate(vocab::CARDINALITY)?;
-        Ok(Schema::from_records(&records))
+        Ok(Schema::resolve(&records, &self.resolver(None)))
     }
 
     /// Directory of a local pack source.
