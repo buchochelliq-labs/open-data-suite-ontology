@@ -196,6 +196,43 @@ pub fn render(transcript: &Transcript) -> String {
         .join("\n")
 }
 
+/// A transcript as a readable Markdown chat with complete tool arguments and
+/// results (results folded), for people reviewing a run.
+pub fn render_chat(title: &str, result: &RunResult) -> String {
+    let mut out = format!("## {title}\n\n");
+    if let Some(error) = &result.error {
+        out.push_str(&format!("> **Error:** {error}\n\n"));
+    }
+    for event in &result.transcript.events {
+        match event {
+            Event::Human { text } => out.push_str(&format!("**🧑 Person:** {text}\n\n")),
+            Event::Agent { text } => out.push_str(&format!("**🤖 Agent:** {text}\n\n")),
+            Event::ToolCall { tool, arguments, ok, result } => {
+                let pretty = |v: &Value| match v {
+                    Value::String(s) => s.clone(),
+                    other => serde_json::to_string_pretty(other).unwrap_or_else(|_| other.to_string()),
+                };
+                out.push_str(&format!(
+                    "🔧 **{tool}** {}\n\n```json\n{}\n```\n\n<details><summary>result{}</summary>\n\n```json\n{}\n```\n\n</details>\n\n",
+                    if *ok { "" } else { "❌ failed" },
+                    pretty(arguments),
+                    if *ok { "" } else { " (error)" },
+                    pretty(result)
+                ));
+            }
+            Event::HumanAction { action, detail } => out.push_str(&format!("**🧑 Person ({action}):** `{detail}`\n\n")),
+        }
+    }
+    if !result.criteria.is_empty() {
+        out.push_str("| Criterion | Outcome | Detail |\n|---|---|---|\n");
+        for c in &result.criteria {
+            out.push_str(&format!("| {} | {:?} | {} |\n", c.id, c.outcome, c.detail.replace('|', "\\|").replace('\n', " ")));
+        }
+        out.push('\n');
+    }
+    out
+}
+
 const JUDGE_SYSTEM: &str =
     "You grade a conversation between a user and an AI data-modelling assistant. Answer only with JSON: {\"pass\": true|false, \"reason\": \"one sentence\"}.";
 

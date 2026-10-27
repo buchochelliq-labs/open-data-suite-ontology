@@ -101,6 +101,11 @@ not at all. In the workflow, hosted requests time out after 2 minutes
 appears in the log with the provider's message. If a model stays overloaded,
 try another model, e.g. `gemini-flash-lite-latest`.
 
+After a run, its **Summary** page on GitHub shows the score table and every
+conversation in full: the person's and agent's messages, each tool call with
+its arguments, and each tool result (folded). The same chats are in
+`transcripts/*.md` in the artifact.
+
 Writes `target/eval/report.md` (pass counts per task, criterion and
 condition), `results.json`, and one transcript per run that can be replayed as
 a regression test.

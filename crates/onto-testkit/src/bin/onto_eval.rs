@@ -13,7 +13,7 @@ use anyhow::{Context, Result, bail};
 use clap::Parser;
 use onto_testkit::agent::{ModelConfig, RequestBudget};
 use onto_testkit::claude_code::ClaudeCodeConfig;
-use onto_testkit::eval::{Agent, Condition, RunResult, Task, errors, render, report, run_task};
+use onto_testkit::eval::{Agent, Condition, RunResult, Task, errors, render_chat, report, run_task};
 use onto_testkit::fixture::repo_root;
 
 #[derive(Parser)]
@@ -98,10 +98,7 @@ async fn main() -> Result<()> {
         let result = run_task(task, condition, run, &agent, judge.as_ref()).await?;
         let stem = out.join("transcripts").join(format!("{}-{}-{run}", task.name, condition.name()));
         std::fs::write(stem.with_extension("jsonl"), result.transcript.to_jsonl())?;
-        std::fs::write(
-            stem.with_extension("md"),
-            format!("# {} / {} / run {run}\n\n```text\n{}\n```\n", task.name, condition.name(), render(&result.transcript)),
-        )?;
+        std::fs::write(stem.with_extension("md"), render_chat(&format!("{} / {} / run {run}", task.name, condition.name()), &result))?;
         if result.budget_exhausted {
             stopped = Some("not run: request budget exhausted earlier in this run".into());
         }

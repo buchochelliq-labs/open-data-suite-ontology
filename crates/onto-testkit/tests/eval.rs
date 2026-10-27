@@ -109,3 +109,18 @@ async fn an_exhausted_quota_marks_the_run_so_the_runner_stops() {
     assert!(result.budget_exhausted);
     assert!(result.error.as_deref().unwrap().contains("daily quota"));
 }
+
+#[tokio::test]
+async fn conversations_render_as_a_readable_chat() {
+    let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
+    let task = tasks.iter().find(|t| t.name == "customer-grain-proposal").unwrap();
+    let (agent_url, _) = serve(vec![tool_call("1", "ontology_entity", json!({ "id": "concept:customer" })), say("A customer is an account holder.")]).await;
+    let result = run_task(task, Condition::OntologyOnly, 1, &Agent::Api(config(agent_url)), None).await.unwrap();
+    let chat = onto_testkit::eval::render_chat("customer / ontology_only / run 1", &result);
+    assert!(chat.contains("**🧑 Person:** I'm designing the customer dimension"), "{chat}");
+    assert!(chat.contains("🔧 **ontology_entity**"));
+    assert!(chat.contains("\"id\": \"concept:customer\""), "arguments are shown in full");
+    assert!(chat.contains("Finance only counts customers"), "tool results are shown in full, not clipped");
+    assert!(chat.contains("**🤖 Agent:** A customer is an account holder."));
+    assert!(chat.contains("| grounded | Pass |"));
+}
