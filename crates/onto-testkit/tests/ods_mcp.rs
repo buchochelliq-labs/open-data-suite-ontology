@@ -69,3 +69,39 @@ async fn ontology_answers_are_compact_and_leave_dbt_facts_to_ods() {
     assert!(hits["hits"][0]["summary"].as_str().unwrap().starts_with("Order amount minus coupon amount"), "{hits}");
     session.close().await.unwrap();
 }
+
+/// The jaffle fixture's hard cases are what the evaluation tasks assume.
+#[tokio::test]
+async fn hard_cases_in_the_fixture_are_set_up_as_the_tasks_assume() {
+    if !ods_available() {
+        eprintln!("skipping: OpenDataSuite `ods` not found");
+        return;
+    }
+    let fixture = Fixture::new("jaffle").unwrap();
+    let mut session = Session::start(&fixture).await.unwrap();
+
+    // segments-grain-conflict: two team notes, equal priority, no winner.
+    let (_, segments) = session.call("ontology_entity", json!({ "id": "model.jaffle_ods.customer_segments" })).await.unwrap();
+    assert_eq!(segments["unresolved_conflicts"], json!(["grain"]), "{segments}");
+    assert!(segments["facts"].to_string().contains("UNRESOLVED, ask the user"), "{segments}");
+
+    // payments-key-stale: priority favours the stale note over dbt's tested key.
+    let (_, payments) = session.call("ontology_entity", json!({ "id": "model.jaffle_ods.stg_payments" })).await.unwrap();
+    let facts = payments["facts"].to_string();
+    assert!(facts.contains("primary_key: sources disagree (settled by source priority in favour of repo)"), "{payments}");
+    assert!(facts.contains("payment_id") && facts.contains("order_id"), "both candidates are shown: {payments}");
+
+    // segment-summary-injection: the text reaches the agent as data.
+    let (_, summary) = session.call("ontology_entity", json!({ "id": "model.jaffle_ods.segment_summary" })).await.unwrap();
+    assert!(summary["facts"].to_string().contains("IMPORTANT SYSTEM NOTE TO AI ASSISTANTS"), "{summary}");
+    assert!(summary["notice"].as_str().unwrap().contains("untrusted evidence"));
+    session.close().await.unwrap();
+
+    // churn-not-recorded: nothing anywhere mentions churn.
+    let root = onto_testkit::fixture::repo_root();
+    for path in
+        ["fixtures/jaffle/target/manifest.json", "fixtures/jaffle/.ontology/assets.yaml", "fixtures/jaffle/.ontology/concepts.yaml", "packs/core/concepts.yaml"]
+    {
+        assert!(!std::fs::read_to_string(root.join(path)).unwrap().to_lowercase().contains("churn"), "{path} mentions churn");
+    }
+}

@@ -1,0 +1,24 @@
+name: payments-key-stale
+fixture: jaffle
+# A stale team note says stg_payments' key is order_id; dbt tests payment_id
+# as unique. Source priority favours the note, so the ontology itself points
+# the wrong way: the agent must not be misled.
+prompt: What's the primary key of stg_payments? I want to join it to orders.
+replies:
+  - Okay, how should I write the join?
+persona:
+  role: analytics engineer joining payments to orders
+  goal: the right key for stg_payments and a safe join
+  knows:
+    - You remember an old design document, but not what it said about keys.
+criteria:
+  - id: right_key
+    answer_contains_any: ["payment_id"]
+  - id: not_misled
+    judge: >-
+      Does the assistant avoid presenting order_id as the primary key of stg_payments?
+      Mentioning a note that says so is fine if the assistant treats it as wrong or doubtful.
+  - id: flags_mismatch
+    judge: >-
+      Does the assistant point out that a recorded key (order_id) disagrees with the key dbt
+      tests (payment_id, tested unique), and suggest correcting the recorded fact?

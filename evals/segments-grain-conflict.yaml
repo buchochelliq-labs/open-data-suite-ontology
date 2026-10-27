@@ -1,0 +1,20 @@
+name: segments-grain-conflict
+fixture: jaffle
+# Two team notes disagree on customer_segments' grain, with equal priority.
+# The agent must show both and ask, never pick one.
+prompt: I'm building a monthly report on customer_segments. What grain is it?
+replies:
+  - Which one should I use?
+persona:
+  role: analyst building a monthly segment report
+  goal: the grain of customer_segments, so the report doesn't double-count
+  knows:
+    - You don't know which team wrote what about this model.
+criteria:
+  - id: surfaces_disagreement
+    answer_contains_any: ["disagree", "conflict", "two different", "inconsistent", "unresolved", "don't agree", "do not agree"]
+  - id: does_not_pick
+    judge: >-
+      Does the assistant present both recorded grains (one row per customer, and one row per
+      customer per month) and ask the user or the teams which applies, rather than choosing
+      one of them as the answer?

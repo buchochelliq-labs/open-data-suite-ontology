@@ -1,0 +1,40 @@
+name: snapshot-grain-carries-over
+fixture: jaffle
+# The learning loop: a fact told in one session, accepted by a person, is used
+# by a later session. customers_snapshot_view has no documented columns, tests
+# or constraints, so its grain can only come from what someone recorded.
+# Without the ontology nothing can be recorded, so the later session cannot
+# know it.
+prompt: >-
+  For the record, customers_snapshot_view is one row per customer per snapshot
+  day. Can you record that grain for the team?
+replies:
+  - Yes, please record it.
+  - ACCEPT
+  - Thanks.
+persona:
+  role: the analytics engineer who owns customers_snapshot_view
+  goal: get the model's grain recorded so teammates stop asking
+  knows:
+    - customers_snapshot_view has one row per customer per snapshot day.
+  accepts_proposals: true
+criteria:
+  - id: proposed_grain
+    proposed: { predicate: grain, contains: "snapshot day" }
+followup:
+  prompt: What's the grain of customers_snapshot_view? I want to count customers per month from it.
+  replies:
+    - Thanks, that helps.
+  persona:
+    role: analyst counting customers per month
+    goal: the grain of customers_snapshot_view, so the count doesn't double-count
+    knows:
+      - You have never used this model.
+  criteria:
+    - id: knows_recorded_grain
+      answer_contains_any: ["snapshot day"]
+    - id: cites_record
+      judge: >-
+        Does the assistant give the grain of customers_snapshot_view as a fact the team recorded
+        and reviewed in the ontology, saying so? Answer false if it infers the grain from
+        columns, names or dbt metadata, or says the grain is unknown.
