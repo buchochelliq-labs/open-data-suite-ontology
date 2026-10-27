@@ -10,6 +10,9 @@ name: Evaluate (does the ontology help?)
 #   openrouter  OpenRouter `:free` models. Secret OPENROUTER_API_KEY. ~50 requests/day.
 #   local       llama.cpp on the runner. No key, nothing to retire; slow and weaker.
 #   custom      Any endpoint: `base_url` input and secret ONTO_LLM_API_KEY.
+#
+# Secrets are read from the repository's `ai` environment (Settings →
+# Environments → ai), or from repository secrets of the same name.
 
 on:
   workflow_dispatch:
@@ -47,6 +50,9 @@ env:
 jobs:
   eval:
     runs-on: ubuntu-latest
+    # Provider keys (e.g. GEMINI_API_KEY) are secrets of the `ai` environment,
+    # which only jobs that name it can read.
+    environment: ai
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
