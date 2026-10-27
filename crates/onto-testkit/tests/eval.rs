@@ -21,6 +21,7 @@ fn config(base_url: String) -> ModelConfig {
         max_tool_result_chars: 4_000,
         timeout: Duration::from_secs(10),
         requests_per_minute: None,
+        budget: None,
     }
 }
 
@@ -96,4 +97,15 @@ async fn a_failing_provider_is_an_error_not_a_score() {
     let results = [result];
     assert_eq!(errors(&results).len(), 2, "the episode and the judged criterion");
     assert!(report(&results).contains("not scores"));
+}
+
+#[tokio::test]
+async fn an_exhausted_quota_marks_the_run_so_the_runner_stops() {
+    let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
+    let task = tasks.iter().find(|t| t.name == "customer-grain-proposal").unwrap();
+    let quota = json!({ "error": { "code": 429, "details": [{ "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] } });
+    let (agent_url, _) = serve(vec![onto_testkit::fake_model::error_with_body(429, quota)]).await;
+    let result = run_task(task, Condition::OntologyOnly, 1, &config(agent_url), None).await.unwrap();
+    assert!(result.budget_exhausted);
+    assert!(result.error.as_deref().unwrap().contains("daily quota"));
 }

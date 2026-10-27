@@ -28,11 +28,60 @@ pub struct ModelConfig {
     /// Space requests to stay under a provider's per-minute limit (e.g. 5 on
     /// Gemini's free tier) instead of hitting it and backing off.
     pub requests_per_minute: Option<u32>,
+    /// A cap on requests for the whole run, shared by every clone of this
+    /// config (agent and judge), for providers with small daily quotas.
+    pub budget: Option<std::sync::Arc<RequestBudget>>,
+}
+
+/// Requests a run may still make.
+#[derive(Debug)]
+pub struct RequestBudget {
+    max: usize,
+    used: std::sync::atomic::AtomicUsize,
+}
+
+impl RequestBudget {
+    pub fn new(max: usize) -> std::sync::Arc<Self> {
+        std::sync::Arc::new(Self { max, used: Default::default() })
+    }
+
+    pub fn used(&self) -> usize {
+        self.used.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Take one request, or fail when none are left.
+    fn take(&self) -> Result<(), BudgetExhausted> {
+        let previous = self.used.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if previous >= self.max {
+            self.used.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+            return Err(BudgetExhausted(format!("the run's budget of {} requests is used", self.max)));
+        }
+        Ok(())
+    }
+}
+
+/// No more requests can succeed today (a provider's daily quota, or the run's
+/// own budget). Retrying cannot help, so callers stop the whole run.
+#[derive(Debug)]
+pub struct BudgetExhausted(pub String);
+
+impl std::fmt::Display for BudgetExhausted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "request budget exhausted: {}", self.0)
+    }
+}
+
+impl std::error::Error for BudgetExhausted {}
+
+/// Whether `error` means no further requests can succeed in this run.
+pub fn is_budget_exhausted(error: &anyhow::Error) -> bool {
+    error.chain().any(|cause| cause.is::<BudgetExhausted>())
 }
 
 impl ModelConfig {
     /// `ONTO_LLM_BASE_URL` (required), `ONTO_LLM_MODEL`, `ONTO_LLM_API_KEY`,
-    /// `ONTO_LLM_RPM` (requests per minute) and `ONTO_LLM_TIMEOUT_SECS`.
+    /// `ONTO_LLM_RPM` (requests per minute), `ONTO_LLM_MAX_REQUESTS` and
+    /// `ONTO_LLM_TIMEOUT_SECS`.
     pub fn from_env() -> Option<Self> {
         let base_url = std::env::var("ONTO_LLM_BASE_URL").ok().filter(|v| !v.is_empty())?;
         Some(Self {
@@ -43,6 +92,7 @@ impl ModelConfig {
             max_tool_result_chars: 4_000,
             timeout: Duration::from_secs(env_number("ONTO_LLM_TIMEOUT_SECS").unwrap_or(600)),
             requests_per_minute: env_number("ONTO_LLM_RPM").map(|n| n as u32).filter(|n| *n > 0),
+            budget: env_number("ONTO_LLM_MAX_REQUESTS").map(|n| RequestBudget::new(n as usize)),
         })
     }
 }
@@ -114,6 +164,19 @@ const ATTEMPTS: u32 = 6;
 /// Longest single wait, whatever `Retry-After` asks for.
 const MAX_WAIT: Duration = Duration::from_secs(120);
 
+/// A rate-limit response caused by a per-day quota (Google reports quota ids
+/// such as `GenerateRequestsPerDayPerProjectPerModel-FreeTier`).
+fn is_daily_quota(body: &str) -> bool {
+    body.contains("PerDay")
+}
+
+/// Seconds from a Google `RetryInfo` detail, e.g. `"retryDelay": "14s"`.
+fn retry_delay_secs(body: &str) -> Option<u64> {
+    let after = &body[body.find("retryDelay")? + "retryDelay".len()..];
+    let digits: String = after.chars().skip_while(|c| !c.is_ascii_digit()).take_while(|c| c.is_ascii_digit()).collect();
+    digits.parse().ok()
+}
+
 fn retryable(status: reqwest::StatusCode) -> bool {
     status == reqwest::StatusCode::TOO_MANY_REQUESTS || matches!(status.as_u16(), 500 | 502 | 503 | 504)
 }
@@ -133,22 +196,26 @@ pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messa
         if let Some(key) = &config.api_key {
             request = request.bearer_auth(key);
         }
+        if let Some(budget) = &config.budget {
+            budget.take()?;
+        }
         let response = request.send().await.context("calling the model")?;
         let status = response.status();
+        let retry_after = response.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse::<u64>().ok());
+        let text = response.text().await.context("reading the model response")?;
+        if status == reqwest::StatusCode::TOO_MANY_REQUESTS && is_daily_quota(&text) {
+            return Err(BudgetExhausted(format!("the provider's daily quota is used ({})", text.chars().take(300).collect::<String>())).into());
+        }
         if retryable(status) && attempt < ATTEMPTS {
-            let wait = response
-                .headers()
-                .get(reqwest::header::RETRY_AFTER)
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.trim().parse::<u64>().ok())
-                .map(Duration::from_secs)
+            let wait = retry_after
+                .or_else(|| retry_delay_secs(&text))
+                .map(|secs| Duration::from_secs(secs + 1))
                 .unwrap_or_else(|| Duration::from_secs(2u64.pow(attempt)))
                 .min(MAX_WAIT);
             eprintln!("model returned {status}; retrying in {}s (attempt {attempt}/{ATTEMPTS})", wait.as_secs());
             tokio::time::sleep(wait).await;
             continue;
         }
-        let text = response.text().await.context("reading the model response")?;
         if !status.is_success() {
             bail!("model returned {status}: {}", text.chars().take(500).collect::<String>());
         }

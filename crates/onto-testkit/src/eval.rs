@@ -20,7 +20,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::agent::{ModelConfig, Reply, ScriptedHuman, complete, run_episode};
+use crate::agent::{ModelConfig, Reply, ScriptedHuman, complete, is_budget_exhausted, run_episode};
 use crate::fixture::{Fixture, ods_available, ods_binary};
 use crate::invariants;
 use crate::session::Session;
@@ -133,6 +133,9 @@ pub struct RunResult {
     /// Set when the model could not be reached or failed mid-episode; the
     /// run's scores then say nothing about the ontology.
     pub error: Option<String>,
+    /// No further requests can succeed (daily quota or the run's budget);
+    /// the runner stops after this run.
+    pub budget_exhausted: bool,
     pub criteria: Vec<CriterionResult>,
     pub tool_calls: usize,
     pub failed_tool_calls: usize,
@@ -225,21 +228,30 @@ async fn score(criterion: &Criterion, transcript: &Transcript, judge_model: Opti
     CriterionResult { id: criterion.id.clone(), outcome, detail }
 }
 
+impl RunResult {
+    /// A planned run that did not happen, and why.
+    pub fn not_run(task: &Task, condition: Condition, run: usize, reason: impl Into<String>) -> Self {
+        RunResult {
+            task: task.name.clone(),
+            condition,
+            run,
+            skipped: Some(reason.into()),
+            error: None,
+            budget_exhausted: false,
+            criteria: Vec::new(),
+            tool_calls: 0,
+            failed_tool_calls: 0,
+            violations: Vec::new(),
+            warnings: Vec::new(),
+            transcript: Transcript::default(),
+        }
+    }
+}
+
 /// Run one task once under one condition.
 pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &ModelConfig, judge_model: Option<&ModelConfig>) -> Result<RunResult> {
-    let mut result = RunResult {
-        task: task.name.clone(),
-        condition,
-        run,
-        skipped: None,
-        error: None,
-        criteria: Vec::new(),
-        tool_calls: 0,
-        failed_tool_calls: 0,
-        violations: Vec::new(),
-        warnings: Vec::new(),
-        transcript: Transcript::default(),
-    };
+    let mut result = RunResult::not_run(task, condition, run, "");
+    result.skipped = None;
     if condition.needs_ods() && !ods_available() {
         result.skipped = Some("OpenDataSuite `ods` is not available".into());
         return Ok(result);
@@ -264,7 +276,10 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Mod
             result.tool_calls = stats.tool_calls;
             result.failed_tool_calls = stats.failed_tool_calls;
         }
-        Err(e) => result.error = Some(format!("{e:#}")),
+        Err(e) => {
+            result.budget_exhausted = is_budget_exhausted(&e);
+            result.error = Some(format!("{e:#}"));
+        }
     }
 
     let report = invariants::check(&transcript, &before, &fixture.repository_files()?);
@@ -272,7 +287,11 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Mod
     result.warnings.extend(report.warnings);
     let http = reqwest::Client::builder().timeout(agent.timeout).build()?;
     for criterion in &task.criteria {
-        result.criteria.push(score(criterion, &transcript, judge_model, &http).await);
+        let scored = score(criterion, &transcript, judge_model, &http).await;
+        if scored.outcome == Outcome::Error && scored.detail.contains("request budget exhausted") {
+            result.budget_exhausted = true;
+        }
+        result.criteria.push(scored);
     }
     result.transcript = transcript;
     Ok(result)

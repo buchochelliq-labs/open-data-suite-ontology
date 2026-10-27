@@ -37,6 +37,19 @@ on:
       rpm:
         description: Requests per minute to stay under (empty = the preset's default, e.g. 5 for gemini)
         required: false
+      task:
+        description: Only tasks whose name contains this (empty = all). One task fits a small daily quota
+        required: false
+      conditions:
+        description: Conditions to compare, comma-separated
+        default: ods_only,ontology_only,both
+      judge:
+        description: Score judged criteria with the model (costs extra requests)
+        type: boolean
+        default: true
+      max_requests:
+        description: Stop after this many model requests (empty = no cap; the run also stops when a daily quota is reached)
+        required: false
       local_model_repo:
         description: For `local`. Hugging Face repository with a GGUF model
         default: bartowski/Qwen2.5-7B-Instruct-GGUF
@@ -104,6 +117,10 @@ jobs:
           CUSTOM_API_KEY: ${{ secrets.ONTO_LLM_API_KEY }}
           RUNS: ${{ inputs.runs }}
           RPM: ${{ inputs.rpm }}
+          TASK: ${{ inputs.task }}
+          CONDITIONS: ${{ inputs.conditions }}
+          JUDGE: ${{ inputs.judge }}
+          MAX_REQUESTS: ${{ inputs.max_requests }}
         run: |
           case "$PROVIDER" in
             gemini)     BASE="https://generativelanguage.googleapis.com/v1beta/openai"; KEY="$GEMINI_API_KEY";     DEFAULT="gemini-flash-latest";      PACE=5 ;;
@@ -122,7 +139,11 @@ jobs:
           if [ -z "$ONTO_LLM_MODEL" ]; then echo "::error::set the model input"; exit 1; fi
           if [ -n "$JUDGE_MODEL" ]; then export ONTO_JUDGE_MODEL="$JUDGE_MODEL"; fi
           echo "provider=$PROVIDER model=$ONTO_LLM_MODEL runs=$RUNS requests_per_minute=${ONTO_LLM_RPM:-unlimited}"
-          cargo run -p onto-testkit --features llm --bin onto-eval -- --runs "$RUNS"
+          ARGS=(--runs "$RUNS" --conditions "$CONDITIONS")
+          if [ -n "$TASK" ]; then ARGS+=(--task "$TASK"); fi
+          if [ "$JUDGE" != "true" ]; then ARGS+=(--no-judge); fi
+          if [ -n "$MAX_REQUESTS" ]; then ARGS+=(--max-requests "$MAX_REQUESTS"); fi
+          cargo run -p onto-testkit --features llm --bin onto-eval -- "${ARGS[@]}"
 
       - name: Summary
         if: always()

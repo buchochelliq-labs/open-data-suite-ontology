@@ -61,6 +61,24 @@ requests are paced to the `rpm` input (`ONTO_LLM_RPM` locally), which defaults t
 5 for `gemini`, 30 for `groq` and 20 for `openrouter`. At 5 a minute a full pass
 takes roughly 15–20 minutes. Keep `runs` at 1 on free tiers.
 
+### Small daily quotas
+
+Some free tiers allow very few requests a day (Gemini's free tier can be as low
+as 20 per model). A full pass will not fit, so run a slice and build up results
+over several days:
+
+| Input | Effect |
+|---|---|
+| `task` | Only tasks whose name contains this, e.g. `order-events-fan-out` |
+| `conditions` | e.g. `ods_only,both`, the comparison that matters most |
+| `judge` | Off saves one request per judged criterion; deterministic checks still score |
+| `max_requests` | Hard cap for the run |
+
+One task under two conditions without the judge is about 10–12 requests. When
+the provider reports that its daily quota is used, the run stops at once
+(no retries), keeps the completed conversations, and lists the rest as not
+run.
+
 Locally:
 
 ```sh

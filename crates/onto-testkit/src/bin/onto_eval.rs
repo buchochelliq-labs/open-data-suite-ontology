@@ -11,8 +11,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use onto_testkit::agent::ModelConfig;
-use onto_testkit::eval::{Condition, Task, errors, report, run_task};
+use onto_testkit::agent::{ModelConfig, RequestBudget};
+use onto_testkit::eval::{Condition, RunResult, Task, errors, report, run_task};
 use onto_testkit::fixture::repo_root;
 
 #[derive(Parser)]
@@ -33,6 +33,12 @@ struct Args {
     /// Output directory for report.md, results.json and transcripts.
     #[arg(long)]
     out: Option<PathBuf>,
+    /// Do not call the judge model; judged criteria are skipped. Saves requests.
+    #[arg(long)]
+    no_judge: bool,
+    /// Stop after this many model requests in total (agent and judge).
+    #[arg(long)]
+    max_requests: Option<usize>,
 }
 
 fn judge_config(agent: &ModelConfig) -> ModelConfig {
@@ -48,8 +54,11 @@ fn judge_config(agent: &ModelConfig) -> ModelConfig {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    let Some(agent) = ModelConfig::from_env() else { bail!("set ONTO_LLM_BASE_URL (and ONTO_LLM_MODEL, ONTO_LLM_API_KEY)") };
-    let judge = judge_config(&agent);
+    let Some(mut agent) = ModelConfig::from_env() else { bail!("set ONTO_LLM_BASE_URL (and ONTO_LLM_MODEL, ONTO_LLM_API_KEY)") };
+    if let Some(max) = args.max_requests {
+        agent.budget = Some(RequestBudget::new(max));
+    }
+    let judge = (!args.no_judge).then(|| judge_config(&agent));
     let conditions: Vec<Condition> = args
         .conditions
         .iter()
@@ -59,22 +68,39 @@ async fn main() -> Result<()> {
     let out = args.out.unwrap_or_else(|| repo_root().join("target/eval"));
     std::fs::create_dir_all(out.join("transcripts"))?;
 
+    let plan: Vec<(&Task, Condition, usize)> = tasks
+        .iter()
+        .filter(|t| args.task.as_ref().is_none_or(|f| t.name.contains(f.as_str())))
+        .flat_map(|t| conditions.iter().filter(|c| t.applies_to(**c)).flat_map(move |&c| (1..=args.runs).map(move |run| (t, c, run))))
+        .collect();
+    eprintln!("{} planned runs", plan.len());
+
     let mut results = Vec::new();
-    for task in tasks.iter().filter(|t| args.task.as_ref().is_none_or(|f| t.name.contains(f.as_str()))) {
-        for &condition in conditions.iter().filter(|c| task.applies_to(**c)) {
-            for run in 1..=args.runs {
-                eprintln!("{} / {} / run {run}", task.name, condition.name());
-                let result = run_task(task, condition, run, &agent, Some(&judge)).await?;
-                let file = out.join("transcripts").join(format!("{}-{}-{run}.jsonl", task.name, condition.name()));
-                std::fs::write(file, result.transcript.to_jsonl())?;
-                results.push(result);
-            }
+    let mut stopped: Option<String> = None;
+    for (task, condition, run) in plan {
+        if let Some(reason) = &stopped {
+            results.push(RunResult::not_run(task, condition, run, reason.clone()));
+            continue;
         }
+        eprintln!("{} / {} / run {run}", task.name, condition.name());
+        let result = run_task(task, condition, run, &agent, judge.as_ref()).await?;
+        let file = out.join("transcripts").join(format!("{}-{}-{run}.jsonl", task.name, condition.name()));
+        std::fs::write(file, result.transcript.to_jsonl())?;
+        if result.budget_exhausted {
+            stopped = Some("not run: request budget exhausted earlier in this run".into());
+        }
+        results.push(result);
+    }
+    if let Some(budget) = &agent.budget {
+        eprintln!("model requests used: {}", budget.used());
     }
     let markdown = report(&results);
     std::fs::write(out.join("report.md"), &markdown)?;
     std::fs::write(out.join("results.json"), serde_json::to_string_pretty(&results)?)?;
     println!("{markdown}");
+    if let Some(reason) = &stopped {
+        bail!("stopped early ({reason}); completed runs are in {}", out.join("report.md").display());
+    }
     let errors = errors(&results);
     if !errors.is_empty() {
         bail!("{} error(s) from the model provider; the report is not a valid evaluation. See {}", errors.len(), out.join("report.md").display());
