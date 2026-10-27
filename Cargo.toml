@@ -1,0 +1,33 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+publish = false
+repository = "https://github.com/buchochelliq-labs/open-data-suite-ontology"
+
+[workspace.dependencies]
+onto-core = { path = "crates/onto-core" }
+onto-store = { path = "crates/onto-store" }
+onto-workspace = { path = "crates/onto-workspace" }
+onto-mcp = { path = "crates/onto-mcp" }
+onto-testkit = { path = "crates/onto-testkit" }
+
+anyhow = "1"
+clap = { version = "4.6", features = ["derive"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+rmcp = { version = "3.8", features = ["server", "client", "macros", "transport-io", "schemars"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
+schemars = "1.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_norway = "0.9"
+sha2 = "0.11"
+tempfile = "3"
+thiserror = "2"
+time = { version = "0.3", features = ["formatting"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "sync"] }
+toml = "1.1"

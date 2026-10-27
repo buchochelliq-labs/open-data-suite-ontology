@@ -1,0 +1,41 @@
+# Example shared concepts. Organisations replace these with their own central pack.
+entities:
+  - id: concept:customer
+    type: BusinessConcept
+    label: Customer
+    definition: A person or organisation that has bought, or may buy, from us.
+    aliases: [client, buyer]
+    relations:
+      - { predicate: places, target: concept:order, qualifiers: { cardinality: one_to_many } }
+
+  - id: concept:order
+    type: BusinessConcept
+    label: Order
+    definition: A customer's request to purchase one or more products.
+    aliases: [purchase, sales order]
+    properties:
+      grain: one row per order
+    relations:
+      - { predicate: contains, target: concept:order_line, qualifiers: { cardinality: one_to_many } }
+
+  - id: concept:order_line
+    type: BusinessConcept
+    label: Order line
+    definition: One product and quantity within an order.
+    properties:
+      grain: one row per order and product
+    relations:
+      - { predicate: relates_to, target: concept:product, qualifiers: { cardinality: many_to_one, role: ordered product } }
+
+  - id: concept:product
+    type: BusinessConcept
+    label: Product
+    definition: Something we sell.
+    aliases: [item, sku]
+
+  - id: standard:model-naming
+    type: ModellingStandard
+    label: Model naming
+    definition: "Models are named <layer>_<source>__<entity>; layer is one of stg, int, fct, dim."
+    relations:
+      - { predicate: applies_to, target: concept:any-model }

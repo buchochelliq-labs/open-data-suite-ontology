@@ -1,0 +1,29 @@
+[package]
+name = "onto-testkit"
+description = "Fixtures, scripted scenarios and model-driven episodes for testing agent/human interaction"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[features]
+# Drive episodes with a model behind an OpenAI-compatible endpoint (llama.cpp, vLLM, hosted).
+llm = ["dep:reqwest"]
+
+[dependencies]
+anyhow.workspace = true
+onto-core.workspace = true
+onto-mcp.workspace = true
+onto-store.workspace = true
+onto-workspace.workspace = true
+reqwest = { workspace = true, optional = true }
+rmcp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_norway.workspace = true
+tempfile.workspace = true
+tokio.workspace = true
+
+[[test]]
+name = "llm_episode"
+required-features = ["llm"]
