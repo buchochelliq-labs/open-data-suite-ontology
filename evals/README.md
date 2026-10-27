@@ -1,13 +1,17 @@
 # Evaluation tasks
 
 Each file is one data-modelling question on a fixture, answered by a model
-under three conditions that differ only in the tools it sees:
+under three conditions that differ in the tools it sees:
 
 | Condition | Tools |
 |---|---|
 | `ods_only` | OpenDataSuite (`ods mcp`): the baseline for a dbt project |
 | `ontology_only` | The ontology (`onto mcp`) |
 | `both` | Both, as intended |
+
+Where the ontology's tools are visible, the agent also gets the
+`ontology-grounding` skill in its system prompt, as an agent host would load
+it. The skill ships with the ontology, so it is part of what is evaluated.
 
 The question the results answer: does adding the ontology to ODS change the
 design for the better, and where? Tasks should therefore depend on knowledge

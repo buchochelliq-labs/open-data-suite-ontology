@@ -11,12 +11,19 @@ is connected.
 
 ## Find what is already known
 
+Check the ontology before you answer, even when ODS already describes the
+models: ODS reports what the code and tests show, and a grain it reports as
+unknown may be one the team has agreed and recorded here.
+
 1. Call `ontology_status` first. Note which sources are loaded, their layer
    (central, repository, local), version and sync time. If a source you expect
    is missing or stale, tell the user; do not sync it yourself.
 2. Use `ontology_search` with the user's words and likely synonyms. Search is
    lexical: a miss means "not found with these words", not "does not exist".
-3. Use `ontology_entity` for each relevant concept or asset. Read the `sources`
+3. Use `ontology_entity` for each relevant concept or asset, and for every dbt
+   model the question names, by its node id (for example
+   `model.shop.payments`). Read its `grain` before reasoning about
+   joins or aggregation, and state it in your answer with its source. Read the `sources`
    of each value: layer, authority (`reviewed`, `declared`, `observed`,
    `inferred`) and locator.
 4. Use `ontology_neighbors` to see related concepts. Relationships are business

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use onto_testkit::agent::ModelConfig;
 use onto_testkit::eval::errors;
-use onto_testkit::eval::{Agent, Condition, Outcome, Task, report, run_task};
+use onto_testkit::eval::{Agent, Condition, Outcome, SYSTEM_PROMPT, Task, report, run_task, system_prompt};
 use onto_testkit::fake_model::{error, say, serve, tool_call};
 use onto_testkit::fixture::repo_root;
 use serde_json::json;
@@ -32,6 +32,17 @@ fn every_task_file_parses_and_has_criteria() {
     for task in &tasks {
         assert!(!task.criteria.is_empty(), "{}", task.name);
         assert!(repo_root().join("fixtures").join(&task.fixture).is_dir(), "{} uses unknown fixture {}", task.name, task.fixture);
+    }
+}
+
+#[test]
+fn the_grounding_skill_comes_with_the_ontology_tools() {
+    assert_eq!(system_prompt(Condition::OdsOnly), SYSTEM_PROMPT, "the baseline gets no ontology guidance");
+    for condition in [Condition::OntologyOnly, Condition::Both] {
+        let prompt = system_prompt(condition);
+        assert!(prompt.starts_with(SYSTEM_PROMPT));
+        assert!(prompt.contains("# Ground a design in the ontology"), "{condition:?}");
+        assert!(!prompt.contains("name: ontology-grounding"), "front matter is stripped");
     }
 }
 

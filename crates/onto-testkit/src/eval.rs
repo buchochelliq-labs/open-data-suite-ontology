@@ -9,7 +9,9 @@
 //! - `both`: the combination this project is for.
 //!
 //! The system prompt is the same everywhere, plus the instructions of the
-//! servers whose tools are visible. Criteria are deterministic checks on the
+//! servers whose tools are visible. Where the ontology's tools are visible the
+//! agent also gets the `ontology-grounding` skill, as a host would load it:
+//! the skill ships with the ontology, so it is part of what is evaluated. Criteria are deterministic checks on the
 //! transcript where possible, and model-judged questions where not. Safety
 //! invariants are checked on every run. Runs repeat, because models vary.
 
@@ -44,6 +46,19 @@ pub type Judge = Agent;
 pub const SYSTEM_PROMPT: &str = "You are a data-modelling assistant for an analytics project. \
 Use the available tools to ground every claim before answering, and say which tool or source a fact came from. \
 Ask the user when information is missing or sources disagree. Never invent models, columns or keys. Be concise.";
+
+/// The skill an agent host loads alongside the ontology's MCP server.
+const GROUNDING_SKILL: &str = include_str!("../../../skills/ontology-grounding/SKILL.md");
+
+/// The system prompt for `condition`: the shared prompt, plus the grounding
+/// skill (without its front matter) when the ontology's tools are visible.
+pub fn system_prompt(condition: Condition) -> String {
+    if condition == Condition::OdsOnly {
+        return SYSTEM_PROMPT.to_string();
+    }
+    let body = GROUNDING_SKILL.splitn(3, "---\n").nth(2).unwrap_or(GROUNDING_SKILL).trim();
+    format!("{SYSTEM_PROMPT}\n\nFollow this skill.\n\n{body}")
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -318,6 +333,7 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Age
     let fixture = Fixture::new(&task.fixture)?;
     let before = fixture.repository_files()?;
     let mut human = ScriptedHuman::new(task.replies.iter().cloned().map(Reply::Say).chain([Reply::End]));
+    let system = system_prompt(condition);
     let (episode, transcript) = match agent {
         Agent::Api(config) => {
             let mut session = Session::start(&fixture).await?;
@@ -329,7 +345,7 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Age
             if let Some(turns) = task.max_turns {
                 config.max_turns = turns;
             }
-            let episode = tokio::time::timeout(RUN_TIMEOUT, run_episode(&mut session, &config, SYSTEM_PROMPT, &task.prompt, &mut human)).await;
+            let episode = tokio::time::timeout(RUN_TIMEOUT, run_episode(&mut session, &config, &system, &task.prompt, &mut human)).await;
             (episode, session.close().await?)
         }
         Agent::ClaudeCode(config) => {
@@ -342,11 +358,9 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Age
                 servers.push(Server::ods(&ods_binary(), &fixture));
             }
             let mut transcript = Transcript::default();
-            let episode = tokio::time::timeout(
-                RUN_TIMEOUT,
-                claude_code::run_episode(&fixture, &servers, config, SYSTEM_PROMPT, &task.prompt, &mut human, &mut transcript),
-            )
-            .await;
+            let episode =
+                tokio::time::timeout(RUN_TIMEOUT, claude_code::run_episode(&fixture, &servers, config, &system, &task.prompt, &mut human, &mut transcript))
+                    .await;
             (episode, transcript)
         }
     };
