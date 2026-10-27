@@ -8,6 +8,7 @@
 | Where does the central ontology live? | Git packs now, pinned by `onto.lock`. A hosted service later. Consumption goes through the `Source` trait, so neither the store nor agents care where facts come from. |
 | Build our own graph, or adopt Graphiti/Cognee? | Build our own core. Graphiti's LLM-driven ingestion is non-deterministic (bad for CI and review), needs a graph-database service and has no notion of authority or review. It can later be a *source* producing `proposed` or `inferred` claims from unstructured material. We took its bi-temporal idea: claim validity (`valid.from/until`) is separate from when we learned it (`retrieved_at`, `source_version`). |
 | Storage | SQLite with FTS5 and indexed edges, following dbt-skills ADR 0001. Encryption at rest (SQLCipher through `rusqlite`'s `bundled-sqlcipher`) is a planned feature flag. Graphiti would not help here. |
+| How is curated context shared across a team? | Through git now; a hosted service later. Raw episodes stay on the machine; curated claims are shared as `inferred` packs and promoted to `reviewed` by a person in a PR. |
 | UX | Deferred. The CLI and MCP server come first. |
 | Python | PyO3 bindings later. Python providers can already plug in today as `command` sources. |
 
