@@ -22,6 +22,11 @@ pub fn error(status: u16, retry_after: Option<&str>) -> Value {
     json!({ "__status": status, "__retry_after": retry_after })
 }
 
+/// A scripted HTTP error with a specific JSON body.
+pub fn error_with_body(status: u16, body: Value) -> Value {
+    json!({ "__status": status, "__body": body })
+}
+
 /// Serve `responses` in order, one per request; returns the base URL and a log of request bodies.
 pub async fn serve(responses: Vec<Value>) -> (String, Arc<Mutex<Vec<Value>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind a local port");
@@ -55,7 +60,7 @@ pub async fn serve(responses: Vec<Value>) -> (String, Arc<Mutex<Vec<Value>>>) {
                 // A scripted error, e.g. `{"__status": 429, "__retry_after": "0"}`.
                 Some(status) => {
                     let retry = message.get("__retry_after").and_then(Value::as_str).map(|r| format!("retry-after: {r}\r\n")).unwrap_or_default();
-                    let payload = json!({ "error": { "message": "scripted error" } }).to_string();
+                    let payload = message.get("__body").cloned().unwrap_or_else(|| json!({ "error": { "message": "scripted error" } })).to_string();
                     format!(
                         "HTTP/1.1 {status} Error\r\ncontent-type: application/json\r\n{retry}content-length: {}\r\nconnection: close\r\n\r\n{payload}",
                         payload.len()

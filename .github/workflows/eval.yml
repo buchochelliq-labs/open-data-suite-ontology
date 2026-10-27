@@ -5,6 +5,8 @@ name: Evaluate (does the ontology help?)
 # cover free options (provider rate limits and model lists change, so check
 # the provider's current documentation):
 #
+#   claude-code Claude Code itself is the agent, on your Claude subscription.
+#               Secret CLAUDE_CODE_OAUTH_TOKEN (run `claude setup-token`).
 #   gemini      Google AI Studio free tier. Secret GEMINI_API_KEY (free, no card).
 #   groq        Groq free tier. Secret GROQ_API_KEY. Low tokens/minute.
 #   openrouter  OpenRouter `:free` models. Secret OPENROUTER_API_KEY. ~50 requests/day.
@@ -20,13 +22,10 @@ on:
       provider:
         description: Model provider
         type: choice
-        options: [gemini, groq, openrouter, local, custom]
-        default: gemini
+        options: [claude-code, gemini, groq, openrouter, local, custom]
+        default: claude-code
       model:
-        description: Agent model (empty = the preset's default)
-        required: false
-      judge_model:
-        description: Judge model (empty = the agent model)
+        description: Agent model (empty = the preset's default; for claude-code e.g. sonnet or opus)
         required: false
       base_url:
         description: For `custom` only. OpenAI-compatible base URL including /v1
@@ -34,12 +33,25 @@ on:
       runs:
         description: Repetitions per task and condition (free tiers allow few requests a day)
         default: "1"
-      local_model_repo:
-        description: For `local`. Hugging Face repository with a GGUF model
-        default: bartowski/Qwen2.5-7B-Instruct-GGUF
-      local_model_file:
-        description: For `local`. GGUF file in that repository
-        default: Qwen2.5-7B-Instruct-Q4_K_M.gguf
+      rpm:
+        description: Requests per minute to stay under (empty = the preset's default, e.g. 5 for gemini)
+        required: false
+      task:
+        description: Only tasks whose name contains this (empty = all). One task fits a small daily quota
+        required: false
+      conditions:
+        description: Conditions to compare, comma-separated
+        default: ods_only,ontology_only,both
+      judge:
+        description: Score judged criteria with the model (costs extra requests)
+        type: boolean
+        default: true
+      max_requests:
+        description: Stop after this many model requests (empty = no cap; the run also stops when a daily quota is reached)
+        required: false
+      local_model:
+        description: For `local`. Hugging Face repository and GGUF file, as repo/file.gguf
+        default: bartowski/Qwen2.5-7B-Instruct-GGUF/Qwen2.5-7B-Instruct-Q4_K_M.gguf
 
 permissions:
   contents: read
@@ -63,20 +75,30 @@ jobs:
           python-version: "3.12"
       - run: pip install opendatasuite==0.0.2
 
+      - name: Install Claude Code and build onto
+        if: inputs.provider == 'claude-code'
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+          cargo build -p onto-cli
+          echo "ONTO_BIN=$PWD/target/debug/onto" >> "$GITHUB_ENV"
+
       - name: Cache local model
         if: inputs.provider == 'local'
         uses: actions/cache@v4
         with:
           path: ~/models
-          key: gguf-${{ inputs.local_model_repo }}-${{ inputs.local_model_file }}
+          key: gguf-${{ inputs.local_model }}
 
       - name: Start local model server
         if: inputs.provider == 'local'
         env:
           GH_TOKEN: ${{ github.token }}
-          MODEL_REPO: ${{ inputs.local_model_repo }}
-          MODEL_FILE: ${{ inputs.local_model_file }}
+          LOCAL_MODEL: ${{ inputs.local_model }}
         run: |
+          MODEL_REPO="${LOCAL_MODEL%/*}"
+          MODEL_FILE="${LOCAL_MODEL##*/}"
+          echo "LOCAL_MODEL_FILE=$MODEL_FILE" >> "$GITHUB_ENV"
           mkdir -p ~/models ~/llama
           if [ ! -f ~/models/"$MODEL_FILE" ]; then
             pip install --quiet "huggingface_hub[cli]"
@@ -92,35 +114,68 @@ jobs:
         env:
           PROVIDER: ${{ inputs.provider }}
           MODEL: ${{ inputs.model }}
-          JUDGE_MODEL: ${{ inputs.judge_model }}
           CUSTOM_BASE_URL: ${{ inputs.base_url }}
-          LOCAL_MODEL_FILE: ${{ inputs.local_model_file }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CUSTOM_API_KEY: ${{ secrets.ONTO_LLM_API_KEY }}
+          CLAUDE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           RUNS: ${{ inputs.runs }}
+          RPM: ${{ inputs.rpm }}
+          TASK: ${{ inputs.task }}
+          CONDITIONS: ${{ inputs.conditions }}
+          JUDGE: ${{ inputs.judge }}
+          MAX_REQUESTS: ${{ inputs.max_requests }}
         run: |
+          ARGS=(--runs "$RUNS" --conditions "$CONDITIONS")
+          if [ -n "$TASK" ]; then ARGS+=(--task "$TASK"); fi
+          if [ "$JUDGE" != "true" ]; then ARGS+=(--no-judge); fi
+          mkdir -p target/eval
+          set -o pipefail
+          if [ "$PROVIDER" = "claude-code" ]; then
+            if [ -z "$CLAUDE_TOKEN" ]; then echo "::error::no CLAUDE_CODE_OAUTH_TOKEN secret: run \`claude setup-token\` and add it to the ai environment"; exit 1; fi
+            # The subscription token must be used, so no API key may be set.
+            unset ANTHROPIC_API_KEY
+            export CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_TOKEN" ONTO_AGENT=claude-code ONTO_CLAUDE_MODEL="$MODEL"
+            echo "provider=claude-code model=${MODEL:-default} runs=$RUNS"
+            cargo run -p onto-testkit --features llm --bin onto-eval -- "${ARGS[@]}" 2>&1 | tee target/eval/live.log
+            exit 0
+          fi
           case "$PROVIDER" in
-            gemini)     BASE="https://generativelanguage.googleapis.com/v1beta/openai"; KEY="$GEMINI_API_KEY";     DEFAULT="gemini-flash-latest" ;;
-            groq)       BASE="https://api.groq.com/openai/v1";                          KEY="$GROQ_API_KEY";       DEFAULT="openai/gpt-oss-120b" ;;
-            openrouter) BASE="https://openrouter.ai/api/v1";                            KEY="$OPENROUTER_API_KEY"; DEFAULT="openai/gpt-oss-120b:free" ;;
-            local)      BASE="http://127.0.0.1:8080/v1";                                KEY="";                    DEFAULT="$LOCAL_MODEL_FILE" ;;
-            custom)     BASE="$CUSTOM_BASE_URL";                                        KEY="$CUSTOM_API_KEY";     DEFAULT="" ;;
+            gemini)     BASE="https://generativelanguage.googleapis.com/v1beta/openai"; KEY="$GEMINI_API_KEY";     DEFAULT="gemini-flash-latest";      PACE=5 ;;
+            groq)       BASE="https://api.groq.com/openai/v1";                          KEY="$GROQ_API_KEY";       DEFAULT="openai/gpt-oss-120b";      PACE=30 ;;
+            openrouter) BASE="https://openrouter.ai/api/v1";                            KEY="$OPENROUTER_API_KEY"; DEFAULT="openai/gpt-oss-120b:free"; PACE=20 ;;
+            local)      BASE="http://127.0.0.1:8080/v1";                                KEY="";                    DEFAULT="$LOCAL_MODEL_FILE";        PACE="" ;;
+            custom)     BASE="$CUSTOM_BASE_URL";                                        KEY="$CUSTOM_API_KEY";     DEFAULT="";                         PACE="" ;;
           esac
+          # Pace requests below the provider's per-minute limit instead of hitting it.
+          export ONTO_LLM_RPM="${RPM:-$PACE}"
+          # Hosted providers answer within seconds; an overloaded one can hang, so
+          # give up on a request after 2 minutes (and retry). A CPU model needs longer.
+          if [ "$PROVIDER" = "local" ]; then export ONTO_LLM_TIMEOUT_SECS=900; else export ONTO_LLM_TIMEOUT_SECS=120; fi
           if [ -z "$BASE" ]; then echo "::error::base_url is required for the custom provider"; exit 1; fi
           if [ "$PROVIDER" != "local" ] && [ -z "$KEY" ]; then
             echo "::error::no API key: add the repository secret for the $PROVIDER provider (see the comment at the top of eval.yml)"; exit 1
           fi
           export ONTO_LLM_BASE_URL="$BASE" ONTO_LLM_API_KEY="$KEY" ONTO_LLM_MODEL="${MODEL:-$DEFAULT}"
           if [ -z "$ONTO_LLM_MODEL" ]; then echo "::error::set the model input"; exit 1; fi
-          if [ -n "$JUDGE_MODEL" ]; then export ONTO_JUDGE_MODEL="$JUDGE_MODEL"; fi
-          echo "provider=$PROVIDER model=$ONTO_LLM_MODEL runs=$RUNS"
-          cargo run -p onto-testkit --features llm --bin onto-eval -- --runs "$RUNS"
+          echo "provider=$PROVIDER model=$ONTO_LLM_MODEL runs=$RUNS requests_per_minute=${ONTO_LLM_RPM:-unlimited} request_timeout=${ONTO_LLM_TIMEOUT_SECS}s"
+          if [ -n "$MAX_REQUESTS" ]; then ARGS+=(--max-requests "$MAX_REQUESTS"); fi
+          # The live conversation log goes to the job output and, for cancelled
+          # runs too, to target/eval/live.log in the uploaded artifact.
+          cargo run -p onto-testkit --features llm --bin onto-eval -- "${ARGS[@]}" 2>&1 | tee target/eval/live.log
 
       - name: Summary
         if: always()
-        run: cat target/eval/report.md >> "$GITHUB_STEP_SUMMARY" || true
+        # Scores, then every conversation in full, on the run's Summary page.
+        # GitHub caps a step summary at 1 MiB, so it is trimmed if needed.
+        run: |
+          {
+            cat target/eval/report.md 2>/dev/null || echo "_No report: the run did not finish. See live.log in the artifact._"
+            echo
+            echo "# Conversations"
+            for f in target/eval/transcripts/*.md; do [ -f "$f" ] && { cat "$f"; echo; }; done
+          } | head -c 1000000 >> "$GITHUB_STEP_SUMMARY"
 
       - uses: actions/upload-artifact@v4
         if: always()

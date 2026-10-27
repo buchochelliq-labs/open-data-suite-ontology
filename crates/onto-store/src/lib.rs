@@ -258,9 +258,12 @@ impl Store {
     }
 
     fn fts(&self, expression: &str, limit: usize) -> Result<Vec<SearchHit>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT entity_id, bm25(entity_text, 4.0, 1.0) AS score FROM entity_text WHERE entity_text MATCH ?1 ORDER BY score, entity_id LIMIT ?2")?;
+        // Columns (`<asset id>#<column>`) rank after models and concepts: a model
+        // has many columns, which would otherwise crowd the entities themselves out.
+        let mut stmt = self.conn.prepare(
+            "SELECT entity_id, bm25(entity_text, 4.0, 1.0) AS score FROM entity_text WHERE entity_text MATCH ?1 \
+             ORDER BY instr(entity_id, '#') > 0, score, entity_id LIMIT ?2",
+        )?;
         let rows = stmt.query_map(params![expression, limit as i64], |row| Ok(SearchHit { id: row.get(0)?, score: -row.get::<_, f64>(1)? }))?;
         Ok(rows.collect::<std::result::Result<_, _>>()?)
     }
@@ -425,6 +428,20 @@ mod tests {
         assert!(store.search("   ", 10).unwrap().is_empty());
         // No result has both terms, so it falls back to either.
         assert!(!store.search("customer zebra", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn search_ranks_models_and_concepts_before_columns() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut records = vec![rec(Claim::literal("model.shop.order_events", vocab::LABEL, "order_events"), "dbt")];
+        for column in ["order_id", "order_date", "order_status", "order_total"] {
+            records.push(rec(Claim::literal(format!("model.shop.orders#{column}"), vocab::LABEL, column), "dbt"));
+        }
+        store.replace_source(&state("dbt"), &records).unwrap();
+        let hits = store.search("order", 3).unwrap();
+        assert_eq!(hits[0].id, "model.shop.order_events", "{hits:?}");
+        // Columns are still found when nothing else matches.
+        assert_eq!(store.search("order_total", 3).unwrap()[0].id, "model.shop.orders#order_total");
     }
 
     #[test]

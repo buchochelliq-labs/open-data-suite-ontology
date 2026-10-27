@@ -23,6 +23,8 @@ pub struct Session {
     clients: Vec<RunningService<RoleClient, ()>>,
     /// Tool name to the index of the client serving it.
     routes: BTreeMap<String, usize>,
+    /// Declared output schemas, checked against every result as strict hosts do.
+    output_schemas: BTreeMap<String, Value>,
     visible: Visibility,
     root: PathBuf,
     pub transcript: Transcript,
@@ -40,7 +42,14 @@ impl Session {
             }
         });
         let client = ().serve(client_io).await.context("connecting MCP client")?;
-        let mut session = Self { clients: Vec::new(), routes: BTreeMap::new(), visible: None, root: fixture.root.clone(), transcript: Transcript::default() };
+        let mut session = Self {
+            clients: Vec::new(),
+            routes: BTreeMap::new(),
+            output_schemas: BTreeMap::new(),
+            visible: None,
+            root: fixture.root.clone(),
+            transcript: Transcript::default(),
+        };
         session.add(client).await?;
         Ok(session)
     }
@@ -48,7 +57,13 @@ impl Session {
     async fn add(&mut self, client: RunningService<RoleClient, ()>) -> Result<()> {
         let index = self.clients.len();
         for tool in client.list_all_tools().await? {
-            self.routes.entry(tool.name.to_string()).or_insert(index);
+            if self.routes.contains_key(tool.name.as_ref()) {
+                continue;
+            }
+            self.routes.insert(tool.name.to_string(), index);
+            if let Some(schema) = &tool.output_schema {
+                self.output_schemas.insert(tool.name.to_string(), Value::Object(schema.as_ref().clone()));
+            }
         }
         self.clients.push(client);
         Ok(())
@@ -112,7 +127,14 @@ impl Session {
                         let text: Vec<String> = result.content.iter().filter_map(|c| c.as_text().map(|t| t.text.clone())).collect();
                         Value::String(text.join("\n"))
                     });
-                    (ok, value)
+                    // Claude Code rejects a result that breaks the tool's declared schema.
+                    match (ok, &result.structured_content, self.output_schemas.get(tool)) {
+                        (true, Some(content), Some(schema)) => match schema_mismatch(schema, content) {
+                            Some(e) => (false, Value::String(format!("Structured content does not match the tool's output schema: {e}"))),
+                            None => (ok, value),
+                        },
+                        _ => (ok, value),
+                    }
                 }
                 // Protocol errors (unknown tool, invalid arguments) are recorded as failed calls.
                 Err(e) => (false, Value::String(e.to_string())),
@@ -145,5 +167,13 @@ impl Session {
             client.cancel().await?;
         }
         Ok(transcript)
+    }
+}
+
+/// Why `content` does not satisfy `schema`, if it does not.
+fn schema_mismatch(schema: &Value, content: &Value) -> Option<String> {
+    match jsonschema::validator_for(schema) {
+        Ok(validator) => validator.iter_errors(content).next().map(|e| format!("{e} at `{}`", e.instance_path())),
+        Err(e) => Some(format!("invalid output schema: {e}")),
     }
 }
