@@ -177,6 +177,8 @@ fn new_tasks_need_the_ontology_by_construction() {
     let manifest = std::fs::read_to_string(repo_root().join("fixtures/jaffle/target/manifest.json")).unwrap();
     assert!(!pack.lines().filter(|l| !l.trim_start().starts_with('#')).any(|l| l.to_lowercase().contains("revenue")));
     assert!(!manifest.to_lowercase().contains("revenue"));
+    // The expected staging name follows only the team's rule, not the project or dbt's default.
+    assert!(!manifest.contains("src_") && manifest.contains("stg_"));
 }
 
 #[test]

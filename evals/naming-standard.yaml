@@ -1,8 +1,10 @@
 name: naming-standard
 fixture: jaffle
-# The central pack's naming standard (<layer>_<source>__<entity>) differs from
-# the existing staging models (stg_orders, stg_payments), so copying the
-# project's pattern gives the wrong name.
+# The team's staging standard (src_<source>__<entity>, in the repository pack)
+# differs from dbt's common stg_<source>__<entity> convention and from the
+# project's existing models (stg_orders, stg_payments). A first simulated run
+# showed the common convention passes without the ontology, so the expected
+# name now only comes from the team's rule.
 prompt: >-
   I'm adding a staging model for payment events that come from our Stripe source.
   What should I call it?
@@ -16,9 +18,9 @@ persona:
     - It is a staging model over the raw payment events table.
 criteria:
   - id: follows_standard
-    answer_contains_any: ["stg_stripe__payment"]
+    answer_contains_any: ["src_stripe__payment"]
   - id: cites_standard
     judge: >-
-      Does the assistant name the model using the team's naming standard
-      (<layer>_<source>__<entity>, with a double underscore before the entity) and say the
-      standard is where the convention comes from, rather than only copying existing model names?
+      Does the assistant recommend the src_ prefix (src_<source>__<entity>) and attribute it
+      to the team's own staging naming standard, rather than to dbt's general stg_ convention
+      or to the existing model names?

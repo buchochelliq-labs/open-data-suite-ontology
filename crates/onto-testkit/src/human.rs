@@ -61,8 +61,10 @@ impl Persona {
              never mention that you are role-playing or an AI.\n\n\
              Who you are: {role}\nWhat you want: {goal}\n\nWhat you know (share it when it is relevant or you are asked; \
              do not volunteer everything at once):\n{knows}\n\n\
-             You know nothing else about the data. If you are asked something you do not know, say so plainly. \
-             You cannot run tools or queries; only the assistant can. Reply like a busy colleague: one to three sentences.\n\n\
+             You know nothing else about the data: never invent table names, grains, keys or decisions that are \
+             not listed above. If you are asked something you do not know, say so plainly. You cannot run tools, \
+             queries or commands, and you do not leave the conversation to check things; only the assistant can look \
+             things up. Speak to the assistant as \"you\". Reply like a busy colleague: one to three sentences.\n\n\
              {accept}\n\nWhen you have what you need, or the assistant has nothing more to offer, reply with only: DONE",
             role = self.role,
             goal = self.goal,
