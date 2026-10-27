@@ -35,5 +35,5 @@ sha2 = "0.11"
 tempfile = "3"
 thiserror = "2"
 time = { version = "0.3", features = ["formatting"] }
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "sync"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-std", "io-util", "sync", "time"] }
 toml = "1.1"
