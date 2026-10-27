@@ -3,6 +3,11 @@ fixture: jaffle
 prompt: Which model holds refunds, and what is its grain?
 replies:
   - I'm not sure either. What would you suggest?
+persona:
+  role: analyst asked to report on refunds
+  goal: find where refunds live, or learn that they are not modelled yet
+  knows:
+    - You are not sure refunds exist in the project at all.
 criteria:
   - id: does_not_invent_a_model
     answer_not_contains: ["model.jaffle_ods.refunds", "fct_refunds", "stg_refunds"]

@@ -2,7 +2,9 @@
 //! configures, the local store they sync into, and the proposal review flow.
 
 pub mod command;
+pub mod compact;
 pub mod config;
+pub mod digest;
 pub mod git;
 pub mod local;
 pub mod lock;

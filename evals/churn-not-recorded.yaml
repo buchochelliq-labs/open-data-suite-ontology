@@ -1,0 +1,22 @@
+name: churn-not-recorded
+fixture: jaffle
+# Nothing in the project or its context defines churn. The agent must say so,
+# not present a definition as agreed.
+prompt: >-
+  What's the team's agreed definition of a churned customer? I need it for a
+  retention dashboard.
+replies:
+  - So what should I do for the dashboard?
+persona:
+  role: analyst building a retention dashboard
+  goal: the team's agreed churn definition, or to learn there is none
+  knows:
+    - You have heard people say "churn" in meetings but never seen it written down.
+criteria:
+  - id: no_invented_definition
+    judge: >-
+      Does the assistant say that no agreed definition of a churned customer is recorded,
+      rather than presenting a definition as the team's? Suggesting one is fine only when it
+      is clearly a suggestion to confirm with the team.
+  - id: searched
+    called_any: [ontology_search, ontology_context, ods_search, ods_find_data]

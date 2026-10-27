@@ -4,6 +4,11 @@ prompt: >-
   Can I join order_events to orders on order_id and then sum order amounts per customer?
 replies:
   - I just need correct totals per customer. What should I do?
+persona:
+  role: analyst preparing customer totals for a finance request
+  goal: correct order totals per customer
+  knows:
+    - You only need totals per customer; the events were just the first table you found.
 criteria:
   - id: warns_about_fan_out
     answer_contains_any: ["fan", "duplicat", "multiple rows", "more than one row", "overcount", "over-count", "double count", "inflate",

@@ -20,8 +20,9 @@ use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
-use crate::agent::{EpisodeStats, Reply, ScriptedHuman, chat};
+use crate::agent::{EpisodeStats, Reply, TokenUsage, chat, last_proposal};
 use crate::fixture::Fixture;
+use crate::human::Person;
 use crate::transcript::{Event, Transcript};
 
 #[derive(Clone, Debug)]
@@ -113,6 +114,8 @@ pub struct Invocation {
     pub failed_tool_calls: usize,
     /// Set when Claude Code reported an error result (e.g. max turns).
     pub error: Option<String>,
+    /// Tokens this invocation used, from its result event.
+    pub usage: TokenUsage,
 }
 
 /// Convert Claude Code `stream-json` lines into transcript events, logging
@@ -174,6 +177,7 @@ pub fn read_stream(lines: impl IntoIterator<Item = String>, servers: &[String], 
             }
             "result" => {
                 out.turns = event["num_turns"].as_u64().unwrap_or(0) as usize;
+                out.usage = TokenUsage::from_anthropic(&event["usage"], out.turns.max(1) as u64);
                 if event["is_error"].as_bool().unwrap_or(false) || event["subtype"].as_str().is_some_and(|s| s != "success") {
                     let reason = event["subtype"].as_str().unwrap_or("error").to_string();
                     let detail = event["result"].as_str().unwrap_or_default();
@@ -189,13 +193,23 @@ pub fn read_stream(lines: impl IntoIterator<Item = String>, servers: &[String], 
     Ok(out)
 }
 
+/// How a `claude -p` call gets its instructions.
+#[derive(Clone, Copy)]
+enum System<'a> {
+    /// Claude Code's own system prompt plus ours: the agent, as a real host runs it.
+    Append(&'a str),
+    /// Ours alone: helper calls (judge, simulated person) that need no agent
+    /// prompt, which would otherwise be sent, and paid for, on every call.
+    Replace(&'a str),
+}
+
 /// Run `claude -p` once in `cwd`, returning its stream-json lines.
 async fn invoke(
     config: &ClaudeCodeConfig,
     cwd: &Path,
     mcp_config: &Path,
     servers: &[String],
-    system: &str,
+    system: System<'_>,
     message: &str,
     resume: Option<&str>,
 ) -> Result<Vec<String>> {
@@ -210,13 +224,15 @@ async fn invoke(
         .arg(servers.iter().map(|s| format!("mcp__{s}")).collect::<Vec<_>>().join(","))
         .arg("--max-turns")
         .arg(config.max_turns.to_string())
-        .arg("--append-system-prompt")
-        .arg(system)
         .current_dir(cwd)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .kill_on_drop(true);
+    match system {
+        System::Append(text) => command.arg("--append-system-prompt").arg(text),
+        System::Replace(text) => command.arg("--system-prompt").arg(text),
+    };
     if let Some(model) = &config.model {
         command.arg("--model").arg(model);
     }
@@ -251,7 +267,7 @@ pub async fn run_episode(
     config: &ClaudeCodeConfig,
     system_prompt: &str,
     opening: &str,
-    human: &mut ScriptedHuman,
+    human: &mut impl Person,
     transcript: &mut Transcript,
 ) -> Result<EpisodeStats> {
     let scratch = tempfile::tempdir()?;
@@ -270,25 +286,21 @@ pub async fn run_episode(
     chat(format!("USER: {message}"));
     loop {
         chat(format!("· claude -p{}", if session.is_some() { " --resume" } else { "" }));
-        let lines = invoke(config, &cwd, &mcp_config, &names, system_prompt, &message, session.as_deref()).await?;
+        let lines = invoke(config, &cwd, &mcp_config, &names, System::Append(system_prompt), &message, session.as_deref()).await?;
         let invocation = read_stream(lines, if session.is_none() { &names } else { &[] }, transcript)?;
         session = invocation.session_id.or(session);
         stats.turns += invocation.turns;
         stats.tool_calls += invocation.tool_calls;
         stats.failed_tool_calls += invocation.failed_tool_calls;
+        stats.usage += invocation.usage;
         if let Some(error) = invocation.error {
             bail!("Claude Code: {error}");
         }
         let Some(session_id) = session.clone() else { bail!("Claude Code reported no session id") };
-        let reply = match human.reply() {
+        let reply = match human.reply(transcript).await? {
             Reply::Say(text) => text,
-            Reply::AcceptLastProposal { by } => {
-                let digest = transcript
-                    .tool_calls()
-                    .filter(|(tool, _, ok, _)| *tool == "ontology_propose" && *ok)
-                    .filter_map(|(.., result)| result["digest"].as_str().map(str::to_string))
-                    .last();
-                match digest {
+            Reply::AcceptLastProposal { by, then } => {
+                let accepted = match last_proposal(transcript) {
                     Some(digest) => {
                         let workspace = onto_workspace::Workspace::load(&fixture.root)?;
                         let mut store = workspace.open_store()?;
@@ -298,7 +310,8 @@ pub async fn run_episode(
                         format!("I accepted proposal {digest} with the onto CLI.")
                     }
                     None => "I don't see a proposal to accept.".to_string(),
-                }
+                };
+                then.map(|t| format!("{accepted} {t}")).unwrap_or(accepted)
             }
             Reply::End => {
                 chat("· the person ends the conversation".to_string());
@@ -313,22 +326,25 @@ pub async fn run_episode(
     Ok(stats)
 }
 
-/// Ask Claude Code a yes/no grading question; returns its raw text answer.
-pub async fn ask(config: &ClaudeCodeConfig, system: &str, prompt: &str) -> Result<String> {
+/// Ask Claude Code one question without tools (for the judge and the simulated
+/// person); returns its text answer and the tokens it used.
+pub async fn ask(config: &ClaudeCodeConfig, system: &str, prompt: &str) -> Result<(String, TokenUsage)> {
     let scratch = tempfile::tempdir()?;
     let mcp_config = scratch.path().join("mcp.json");
     std::fs::write(&mcp_config, br#"{"mcpServers":{}}"#)?;
     let one_turn = ClaudeCodeConfig { max_turns: 1, ..config.clone() };
-    let lines = invoke(&one_turn, scratch.path(), &mcp_config, &[], system, prompt, None).await?;
+    let lines = invoke(&one_turn, scratch.path(), &mcp_config, &[], System::Replace(system), prompt, None).await?;
     let mut answer = String::new();
+    let mut usage = TokenUsage::default();
     for line in lines {
         if let Ok(event) = serde_json::from_str::<Value>(&line)
             && event["type"] == "result"
         {
             answer = event["result"].as_str().unwrap_or_default().to_string();
+            usage = TokenUsage::from_anthropic(&event["usage"], 1);
         }
     }
-    Ok(answer)
+    Ok((answer, usage))
 }
 
 #[cfg(test)]

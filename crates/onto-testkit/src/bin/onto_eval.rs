@@ -5,15 +5,18 @@
 //!   cargo run -p onto-testkit --features llm --bin onto-eval -- --runs 3
 //! ```
 //! The judge uses `ONTO_JUDGE_BASE_URL` / `ONTO_JUDGE_MODEL` / `ONTO_JUDGE_API_KEY`,
-//! falling back to the agent's model. `ods` must be installed (or `ONTO_ODS_BIN`).
+//! falling back to the agent's model. With `--human simulated`, a model plays the
+//! person from each task's persona: `ONTO_HUMAN_BASE_URL` / `ONTO_HUMAN_MODEL` /
+//! `ONTO_HUMAN_API_KEY`, also falling back to the agent's model. `ods` must be
+//! installed (or `ONTO_ODS_BIN`).
 
 use std::path::PathBuf;
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Result, bail};
 use clap::Parser;
 use onto_testkit::agent::{ModelConfig, RequestBudget};
 use onto_testkit::claude_code::ClaudeCodeConfig;
-use onto_testkit::eval::{Agent, Condition, RunResult, Task, errors, render_chat, report, run_task};
+use onto_testkit::eval::{Agent, Cast, Condition, RunResult, Task, errors, render_chat, report, run_task};
 use onto_testkit::fixture::repo_root;
 
 #[derive(Parser)]
@@ -25,9 +28,14 @@ struct Args {
     /// Repetitions per task and condition.
     #[arg(long, default_value_t = 3)]
     runs: usize,
-    /// Conditions to compare.
+    /// Conditions to compare: ods_only, ontology_only or both, each optionally
+    /// with +digest (the context digest in the system prompt).
     #[arg(long, value_delimiter = ',', default_values_t = ["ods_only".to_string(), "ontology_only".to_string(), "both".to_string()])]
     conditions: Vec<String>,
+    /// Who plays the person: the tasks' scripted replies, or a model given
+    /// each task's persona (tasks without a persona stay scripted).
+    #[arg(long, value_enum, default_value_t = HumanMode::Scripted)]
+    human: HumanMode,
     /// Only tasks whose name contains this.
     #[arg(long)]
     task: Option<String>,
@@ -42,12 +50,19 @@ struct Args {
     max_requests: Option<usize>,
 }
 
-fn judge_config(agent: &ModelConfig) -> ModelConfig {
-    let var = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
+#[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
+enum HumanMode {
+    Scripted,
+    Simulated,
+}
+
+/// A model for `role` (`JUDGE` or `HUMAN`) from `ONTO_<role>_*`, defaulting to the agent's.
+fn role_config(agent: &ModelConfig, role: &str) -> ModelConfig {
+    let var = |name: &str| std::env::var(format!("ONTO_{role}_{name}")).ok().filter(|v| !v.is_empty());
     ModelConfig {
-        base_url: var("ONTO_JUDGE_BASE_URL").unwrap_or_else(|| agent.base_url.clone()),
-        model: var("ONTO_JUDGE_MODEL").unwrap_or_else(|| agent.model.clone()),
-        api_key: var("ONTO_JUDGE_API_KEY").or_else(|| agent.api_key.clone()),
+        base_url: var("BASE_URL").unwrap_or_else(|| agent.base_url.clone()),
+        model: var("MODEL").unwrap_or_else(|| agent.model.clone()),
+        api_key: var("API_KEY").or_else(|| agent.api_key.clone()),
         ..agent.clone()
     }
 }
@@ -56,10 +71,14 @@ fn judge_config(agent: &ModelConfig) -> ModelConfig {
 async fn main() -> Result<()> {
     let args = Args::parse();
     let mut budget = None;
-    let (agent, judge) = if std::env::var("ONTO_AGENT").is_ok_and(|a| a == "claude-code") {
+    let simulated = args.human == HumanMode::Simulated;
+    let (agent, judge, person) = if std::env::var("ONTO_AGENT").is_ok_and(|a| a == "claude-code") {
         let config = ClaudeCodeConfig::from_env();
         eprintln!("agent: Claude Code ({}), onto at {}", config.model.as_deref().unwrap_or("default model"), config.onto_bin.display());
-        (Agent::ClaudeCode(config.clone()), (!args.no_judge).then_some(Agent::ClaudeCode(config)))
+        // The judge and the person can run on a smaller model (ONTO_JUDGE_MODEL, ONTO_HUMAN_MODEL).
+        let role = |var: &str| ClaudeCodeConfig { model: std::env::var(var).ok().filter(|m| !m.is_empty()).or(config.model.clone()), ..config.clone() };
+        let (judge, person) = (role("ONTO_JUDGE_MODEL"), role("ONTO_HUMAN_MODEL"));
+        (Agent::ClaudeCode(config), (!args.no_judge).then_some(Agent::ClaudeCode(judge)), simulated.then_some(Agent::ClaudeCode(person)))
     } else {
         let Some(mut config) = ModelConfig::from_env() else {
             bail!("set ONTO_LLM_BASE_URL (and ONTO_LLM_MODEL, ONTO_LLM_API_KEY), or ONTO_AGENT=claude-code")
@@ -68,14 +87,19 @@ async fn main() -> Result<()> {
             config.budget = Some(RequestBudget::new(max));
         }
         budget = config.budget.clone();
-        let judge = (!args.no_judge).then(|| Agent::Api(judge_config(&config)));
-        (Agent::Api(config), judge)
+        let judge = (!args.no_judge).then(|| Agent::Api(role_config(&config, "JUDGE")));
+        let person = simulated.then(|| Agent::Api(role_config(&config, "HUMAN")));
+        (Agent::Api(config), judge, person)
     };
-    let conditions: Vec<Condition> = args
-        .conditions
-        .iter()
-        .map(|c| serde_json::from_value(serde_json::Value::String(c.clone())).with_context(|| format!("unknown condition `{c}`")))
-        .collect::<Result<_>>()?;
+    if let Some(person) = &person {
+        let name = match person {
+            Agent::Api(c) => c.model.clone(),
+            Agent::ClaudeCode(c) => format!("Claude Code ({})", c.model.as_deref().unwrap_or("default model")),
+        };
+        eprintln!("person: simulated by {name} from each task's persona");
+    }
+    let cast = Cast { agent: &agent, judge: judge.as_ref(), person: person.as_ref() };
+    let conditions: Vec<Condition> = args.conditions.iter().map(|c| c.parse::<Condition>().map_err(anyhow::Error::msg)).collect::<Result<_>>()?;
     let tasks = Task::load_dir(&args.evals.unwrap_or_else(|| repo_root().join("evals")))?;
     let out = args.out.unwrap_or_else(|| repo_root().join("target/eval"));
     std::fs::create_dir_all(out.join("transcripts"))?;
@@ -95,7 +119,7 @@ async fn main() -> Result<()> {
             continue;
         }
         eprintln!("\n=== {} / {} / run {run} ===", task.name, condition.name());
-        let result = run_task(task, condition, run, &agent, judge.as_ref()).await?;
+        let result = run_task(task, condition, run, cast).await?;
         let stem = out.join("transcripts").join(format!("{}-{}-{run}", task.name, condition.name()));
         std::fs::write(stem.with_extension("jsonl"), result.transcript.to_jsonl())?;
         std::fs::write(stem.with_extension("md"), render_chat(&format!("{} / {} / run {run}", task.name, condition.name()), &result))?;
@@ -107,6 +131,19 @@ async fn main() -> Result<()> {
     if let Some(budget) = &budget {
         eprintln!("model requests used: {}", budget.used());
     }
+    let mut total = onto_testkit::agent::TokenUsage::default();
+    for r in &results {
+        total += r.tokens.agent;
+        total += r.tokens.person;
+        total += r.tokens.judge;
+    }
+    eprintln!(
+        "tokens used: {} new input, {} cached input, {} output, over {} requests",
+        total.input + total.cache_write,
+        total.cache_read,
+        total.output,
+        total.requests
+    );
     let markdown = report(&results);
     std::fs::write(out.join("report.md"), &markdown)?;
     std::fs::write(out.join("results.json"), serde_json::to_string_pretty(&results)?)?;

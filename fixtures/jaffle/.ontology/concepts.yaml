@@ -1,0 +1,30 @@
+# What the team agreed about measures. The words in these facts are chosen so
+# that evaluation tasks phrased differently ("revenue") need exploration, not
+# a lucky keyword: nothing here contains the word "revenue".
+entities:
+  - id: concept:net_sales
+    type: BusinessConcept
+    label: Net sales
+    definition: >-
+      Order amount minus coupon amount, counting only orders whose status is
+      completed. Returned orders are excluded. This is the figure finance reports
+      each month.
+    rationale: Agreed with finance in the 2026 planning review.
+
+  # Reached from the orders model through `represents`: a multi-hop fact.
+  - id: concept:order
+    relations:
+      - { predicate: measured_by, target: concept:net_sales }
+
+  # The team's own rule, which differs from dbt's common stg_ convention and
+  # from the project's existing model names, so it can only come from here.
+  - id: standard:staging-naming
+    type: ModellingStandard
+    label: Staging model naming
+    definition: >-
+      Staging models over a source are named src_<source>__<entity>, with a
+      double underscore before the entity. The team does not use the stg_
+      prefix for new models; existing stg_ models are being renamed.
+    rationale: Agreed in the 2026 modelling guidelines review.
+    relations:
+      - { predicate: refines, target: standard:model-naming }

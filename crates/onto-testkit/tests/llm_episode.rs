@@ -24,7 +24,7 @@ async fn customer_dimension_episode() {
     let mut session = Session::start(&fixture).await.unwrap();
     let mut human = ScriptedHuman::new([
         Reply::Say("Use the repository definition. Please propose recording that the customer grain is one row per person; I decided that just now.".into()),
-        Reply::AcceptLastProposal { by: "eval-reviewer".into() },
+        Reply::AcceptLastProposal { by: "eval-reviewer".into(), then: None },
         Reply::End,
     ]);
 

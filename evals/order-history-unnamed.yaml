@@ -1,0 +1,30 @@
+name: order-history-unnamed
+fixture: jaffle
+# The person says "order history"; the model is order_events and its agreed
+# grain is in the ontology. Nothing in the prompt names it.
+prompt: >-
+  When I join our order history to orders, my order counts go up. What's going on?
+replies:
+  - Which table is that, and how should I fix the join?
+persona:
+  role: analyst whose order counts look too high after a join
+  goal: understand why counts grow and how to fix the query
+  knows:
+    - You call it "order history"; you are not sure of the model's exact name.
+    - You joined on order_id.
+criteria:
+  - id: finds_model
+    answer_contains_any: ["order_events"]
+  - id: knows_event_grain
+    answer_contains_any: ["status change"]
+  # A model can guess "status change" from the columns; only the ontology says
+  # it is agreed. A rerun showed ods_only passing the keyword on a guess.
+  - id: grain_is_cited
+    judge: >-
+      Does the assistant present "one row per order status change" as the team's agreed or
+      recorded grain, citing where it comes from, rather than as a guess from column names?
+  - id: fix
+    judge: >-
+      Does the assistant explain that the history model has several rows per order (one per
+      status change) and recommend deduplicating or aggregating to one row per order before
+      joining, or counting distinct orders?

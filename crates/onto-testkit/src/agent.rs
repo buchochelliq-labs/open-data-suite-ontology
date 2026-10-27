@@ -12,8 +12,9 @@ use std::time::Duration;
 use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 
+use crate::human::Person;
 use crate::session::Session;
-use crate::transcript::Event;
+use crate::transcript::{Event, Transcript};
 
 #[derive(Clone, Debug)]
 pub struct ModelConfig {
@@ -101,9 +102,11 @@ impl ModelConfig {
 #[derive(Clone, Debug)]
 pub enum Reply {
     Say(String),
-    /// Accept the most recent successful proposal, then tell the agent.
+    /// Accept the most recent successful proposal, then tell the agent (and
+    /// say `then`, if anything).
     AcceptLastProposal {
         by: String,
+        then: Option<String>,
     },
     End,
 }
@@ -120,7 +123,7 @@ impl ScriptedHuman {
     }
 
     /// The next scripted reply, or `End` when the script is exhausted.
-    pub fn reply(&mut self) -> Reply {
+    pub fn next_reply(&mut self) -> Reply {
         self.replies.pop_front().unwrap_or(Reply::End)
     }
 }
@@ -130,6 +133,67 @@ pub struct EpisodeStats {
     pub turns: usize,
     pub tool_calls: usize,
     pub failed_tool_calls: usize,
+    /// Tokens the agent's model used.
+    pub usage: TokenUsage,
+}
+
+/// Tokens a model reported using, summed over requests.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct TokenUsage {
+    /// Requests counted.
+    pub requests: u64,
+    /// Input tokens processed at full price.
+    pub input: u64,
+    /// Input tokens read from a prompt cache.
+    pub cache_read: u64,
+    /// Input tokens written to a prompt cache.
+    pub cache_write: u64,
+    pub output: u64,
+}
+
+impl TokenUsage {
+    /// From an OpenAI-compatible `usage` object.
+    pub fn from_openai(usage: &Value) -> Self {
+        let n = |k: &str| usage[k].as_u64().unwrap_or(0);
+        let cached = usage["prompt_tokens_details"]["cached_tokens"].as_u64().unwrap_or(0);
+        Self { requests: 1, input: n("prompt_tokens").saturating_sub(cached), cache_read: cached, cache_write: 0, output: n("completion_tokens") }
+    }
+
+    /// From an Anthropic `usage` object, as Claude Code reports it.
+    pub fn from_anthropic(usage: &Value, requests: u64) -> Self {
+        let n = |k: &str| usage[k].as_u64().unwrap_or(0);
+        Self {
+            requests,
+            input: n("input_tokens"),
+            cache_read: n("cache_read_input_tokens"),
+            cache_write: n("cache_creation_input_tokens"),
+            output: n("output_tokens"),
+        }
+    }
+
+    /// Every input and output token, cached or not.
+    pub fn total(&self) -> u64 {
+        self.input + self.cache_read + self.cache_write + self.output
+    }
+}
+
+impl std::ops::AddAssign for TokenUsage {
+    fn add_assign(&mut self, other: Self) {
+        self.requests += other.requests;
+        self.input += other.input;
+        self.cache_read += other.cache_read;
+        self.cache_write += other.cache_write;
+        self.output += other.output;
+    }
+}
+
+/// The digest of the most recent successful `ontology_propose`.
+pub(crate) fn last_proposal(transcript: &Transcript) -> Option<String> {
+    transcript
+        .tool_calls()
+        .filter(|(tool, _, ok, _)| *tool == "ontology_propose" && *ok)
+        .filter_map(|(.., result)| result["digest"].as_str().map(str::to_string))
+        .last()
 }
 
 fn truncate(text: String, max: usize) -> String {
@@ -199,10 +263,10 @@ fn retryable(status: reqwest::StatusCode) -> bool {
     status == reqwest::StatusCode::TOO_MANY_REQUESTS || matches!(status.as_u16(), 500 | 502 | 503 | 504)
 }
 
-/// One chat completion; returns the assistant message. Tools are omitted when
-/// empty. Free tiers (e.g. GitHub Models) rate-limit, so 429 and transient 5xx
+/// One chat completion; returns the assistant message and the tokens used.
+/// Tools are omitted when empty. Free tiers (e.g. GitHub Models) rate-limit, so 429 and transient 5xx
 /// responses are retried, honouring `Retry-After` and otherwise backing off.
-pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messages: &[Value], tools: &[Value]) -> Result<Value> {
+pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messages: &[Value], tools: &[Value]) -> Result<(Value, TokenUsage)> {
     let mut body = json!({ "model": config.model, "messages": messages, "temperature": 0 });
     if !tools.is_empty() {
         body["tools"] = json!(tools);
@@ -254,7 +318,8 @@ pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messa
             bail!("model returned {status}: {}", text.chars().take(500).collect::<String>());
         }
         let body: Value = serde_json::from_str(&text).context("decoding the model response")?;
-        return body["choices"][0]["message"].as_object().cloned().map(Value::Object).with_context(|| format!("no message in {body}"));
+        let message = body["choices"][0]["message"].as_object().cloned().map(Value::Object).with_context(|| format!("no message in {body}"))?;
+        return Ok((message, TokenUsage::from_openai(&body["usage"])));
     }
     unreachable!("the last attempt returns or bails")
 }
@@ -268,8 +333,8 @@ fn portable_schema(schema: &serde_json::Map<String, Value>) -> Value {
 }
 
 /// Run one conversation: `opening` from the person, then alternate model turns
-/// (with tool calls) and scripted replies until the script ends or `max_turns`.
-pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_prompt: &str, opening: &str, human: &mut ScriptedHuman) -> Result<EpisodeStats> {
+/// (with tool calls) and the person's replies until they end it or `max_turns`.
+pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_prompt: &str, opening: &str, human: &mut impl Person) -> Result<EpisodeStats> {
     let http = reqwest::Client::builder().timeout(config.timeout).connect_timeout(Duration::from_secs(30)).build()?;
     let tools: Vec<Value> = session
         .tools()
@@ -290,7 +355,8 @@ pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_pro
         stats.turns += 1;
         chat(format!("· model request {} ({} messages, {} tools)", stats.turns, messages.len(), tools.len()));
         let started = std::time::Instant::now();
-        let message = complete(&http, config, &messages, &tools).await?;
+        let (message, usage) = complete(&http, config, &messages, &tools).await?;
+        stats.usage += usage;
         chat(format!("· model replied in {:.1}s", started.elapsed().as_secs_f64()));
         let calls = message["tool_calls"].as_array().cloned().unwrap_or_default();
         let text = message["content"].as_str().unwrap_or_default().trim().to_string();
@@ -347,23 +413,18 @@ pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_pro
 
         chat(format!("ASSISTANT: {}", if text.is_empty() { "(empty reply)" } else { &text }));
         session.agent_says(&text);
-        let reply = match human.reply() {
+        let reply = match human.reply(&session.transcript).await? {
             Reply::Say(text) => text,
-            Reply::AcceptLastProposal { by } => {
-                let digest = session
-                    .transcript
-                    .tool_calls()
-                    .filter(|(tool, _, ok, _)| *tool == "ontology_propose" && *ok)
-                    .filter_map(|(.., result)| result["digest"].as_str().map(str::to_string))
-                    .last();
-                match digest {
+            Reply::AcceptLastProposal { by, then } => {
+                let accepted = match last_proposal(&session.transcript) {
                     Some(digest) => {
                         session.human_accepts(&digest, &by)?;
                         chat(format!("USER ACTION: accepted proposal {digest}"));
                         format!("I accepted proposal {digest} with the onto CLI.")
                     }
                     None => "I don't see a proposal to accept.".to_string(),
-                }
+                };
+                then.map(|t| format!("{accepted} {t}")).unwrap_or(accepted)
             }
             Reply::End => {
                 chat("· the person ends the conversation".to_string());

@@ -10,6 +10,14 @@ replies:
     Use the repository definition. The dimension is one row per person, even if they have
     several accounts. Please record that grain so the rest of the team knows.
   - Thanks.
+persona:
+  role: data modeller designing the shop's customer dimension
+  goal: a customer dimension definition, with its grain recorded for the team
+  knows:
+    - The repository definition is the one to use.
+    - The dimension is one row per person, even if a person has several accounts.
+    - You want the grain recorded so the rest of the team knows.
+  accepts_proposals: true
 criteria:
   - id: surfaces_conflict
     answer_contains_any: ["account holder"]

@@ -6,7 +6,7 @@
 use std::os::unix::fs::PermissionsExt;
 
 use onto_testkit::agent::{Reply, ScriptedHuman};
-use onto_testkit::claude_code::{ClaudeCodeConfig, Server, run_episode};
+use onto_testkit::claude_code::{ClaudeCodeConfig, Server, ask, run_episode};
 use onto_testkit::{Fixture, Transcript};
 
 const FAKE: &str = r#"#!/bin/sh
@@ -23,7 +23,7 @@ case " $* " in
     echo '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"mcp__onto__ontology_entity","input":{"id":"concept:customer"}}]}}'
     echo '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"{\"found\":true}","is_error":false}]}}'
     echo '{"type":"assistant","message":{"content":[{"type":"text","text":"The repository says an account holder."}]}}'
-    echo '{"type":"result","subtype":"success","is_error":false,"num_turns":2}'
+    echo '{"type":"result","subtype":"success","is_error":false,"num_turns":2,"result":"yes","usage":{"input_tokens":100,"cache_read_input_tokens":2000,"cache_creation_input_tokens":300,"output_tokens":50}}'
     ;;
 esac
 "#;
@@ -52,6 +52,11 @@ async fn claude_code_is_driven_through_its_cli() {
     let stats = run_episode(&fixture, &servers, &config, "system prompt", "What is a customer?", &mut human, &mut transcript).await.unwrap();
 
     assert_eq!((stats.turns, stats.tool_calls), (3, 1));
+    assert_eq!(
+        (stats.usage.input, stats.usage.cache_read, stats.usage.cache_write, stats.usage.output),
+        (100, 2000, 300, 50),
+        "tokens come from the result event"
+    );
     let (tool, ..) = transcript.tool_calls().next().unwrap();
     assert_eq!(tool, "ontology_entity");
     assert_eq!(transcript.agent_texts().collect::<Vec<_>>(), vec!["The repository says an account holder.", "Noted; I proposed it for review."]);
@@ -70,8 +75,19 @@ async fn claude_code_is_driven_through_its_cli() {
     assert_eq!(value_after(first, "--allowedTools").as_deref(), Some("mcp__onto"));
     assert_eq!(value_after(first, "--max-turns").as_deref(), Some("7"));
     assert_eq!(value_after(first, "--model").as_deref(), Some("sonnet"));
+    assert_eq!(value_after(first, "--append-system-prompt").as_deref(), Some("system prompt"), "the agent keeps Claude Code's own prompt");
+    assert!(!first.contains(&"--system-prompt"));
     let mcp = std::fs::read_to_string(value_after(first, "--mcp-config").unwrap());
     assert!(mcp.is_err(), "the MCP config lives in a scratch dir removed after the episode");
     assert_eq!(value_after(&calls[1], "--resume").as_deref(), Some("sess-1"));
     assert_eq!(calls[1][1], "Record grain as one row per person.");
+
+    // Helper calls (judge, simulated person) replace Claude Code's prompt instead of paying for it.
+    let (answer, usage) = ask(&config, "You grade conversations.", "Question?").await.unwrap();
+    assert_eq!((answer.as_str(), usage.output), ("yes", 50));
+    let calls = std::fs::read_to_string(&log).unwrap();
+    let helper: Vec<&str> = calls.split("---\n").filter(|c| !c.is_empty()).last().unwrap().lines().collect();
+    assert_eq!(value_after(&helper, "--system-prompt").as_deref(), Some("You grade conversations."));
+    assert!(!helper.contains(&"--append-system-prompt"));
+    assert_eq!(value_after(&helper, "--max-turns").as_deref(), Some("1"));
 }

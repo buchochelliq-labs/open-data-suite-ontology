@@ -1,0 +1,26 @@
+name: naming-standard
+fixture: jaffle
+# The team's staging standard (src_<source>__<entity>, in the repository pack)
+# differs from dbt's common stg_<source>__<entity> convention and from the
+# project's existing models (stg_orders, stg_payments). A first simulated run
+# showed the common convention passes without the ontology, so the expected
+# name now only comes from the team's rule.
+prompt: >-
+  I'm adding a staging model for payment events that come from our Stripe source.
+  What should I call it?
+replies:
+  - Thanks. Anything else about the name I should know?
+persona:
+  role: analytics engineer adding a new staging model
+  goal: a model name that follows the team's conventions
+  knows:
+    - The source is declared as `stripe` in the project's sources file.
+    - It is a staging model over the raw payment events table.
+criteria:
+  - id: follows_standard
+    answer_contains_any: ["src_stripe__payment"]
+  - id: cites_standard
+    judge: >-
+      Does the assistant recommend the src_ prefix (src_<source>__<entity>) and attribute it
+      to the team's own staging naming standard, rather than to dbt's general stg_ convention
+      or to the existing model names?
