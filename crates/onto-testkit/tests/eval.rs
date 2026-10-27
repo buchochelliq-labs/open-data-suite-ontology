@@ -288,4 +288,10 @@ fn repeated_runs_report_their_spread() {
     assert!(!one.contains("Spread across runs"), "a single run has no spread");
     let three = report(&[run(1, &[Outcome::Pass, Outcome::Pass]), run(2, &[Outcome::Pass, Outcome::Fail]), run(3, &[Outcome::Fail, Outcome::Fail])]);
     assert!(three.contains("| both | 3 | 50% | 0% | 100% |"), "{three}");
+
+    // A provider outage or an unanswered judgement is not a failing score.
+    let mut outage = run(2, &[Outcome::Fail, Outcome::Fail]);
+    outage.error = Some("model returned 503".into());
+    let errors = report(&[run(1, &[Outcome::Pass, Outcome::Pass]), outage, run(3, &[Outcome::Pass, Outcome::Error])]);
+    assert!(errors.contains("| both | 2 | 100% | 100% | 100% |"), "{errors}");
 }

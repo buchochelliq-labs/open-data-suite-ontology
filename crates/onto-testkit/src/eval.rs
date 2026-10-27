@@ -740,10 +740,11 @@ pub fn report(results: &[RunResult]) -> String {
     }
     out.push_str(&format!("| **All** | | {} |\n", conditions.iter().map(|c| cell(totals.get(c))).collect::<Vec<_>>().join(" | ")));
     // With repeated runs, how much each condition's overall pass rate varies.
+    // Errors are not scores: errored runs and unanswered judgements are left out.
     let mut per_run: BTreeMap<Condition, BTreeMap<usize, (usize, usize)>> = BTreeMap::new();
-    for r in results.iter().filter(|r| r.skipped.is_none()) {
+    for r in results.iter().filter(|r| r.skipped.is_none() && r.error.is_none()) {
         let cell = per_run.entry(r.condition).or_default().entry(r.run).or_default();
-        for c in r.criteria.iter().filter(|c| c.outcome != Outcome::Skipped) {
+        for c in r.criteria.iter().filter(|c| matches!(c.outcome, Outcome::Pass | Outcome::Fail)) {
             cell.1 += 1;
             if c.outcome == Outcome::Pass {
                 cell.0 += 1;
