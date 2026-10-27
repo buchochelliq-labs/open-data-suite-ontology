@@ -12,7 +12,6 @@ use std::collections::BTreeSet;
 use onto_core::{Conflict, ConflictStatus, EntityView, Object, Property, Value, vocab};
 use onto_store::{ProposalStatus, Store};
 
-use crate::config::SourceKind;
 use crate::proposals;
 use crate::workspace::{Result, Workspace};
 
@@ -160,11 +159,7 @@ impl Renderer<'_> {
 /// Render the digest for `workspace` from `store`.
 pub fn render(workspace: &Workspace, store: &Store, options: &DigestOptions) -> Result<String> {
     let sources = store.sources()?;
-    let team: BTreeSet<String> = sources
-        .iter()
-        .filter(|s| !matches!(workspace.source_config(&s.source_id).map(|c| &c.kind), Some(SourceKind::Ods { .. })))
-        .map(|s| s.source_id.clone())
-        .collect();
+    let team = crate::compact::team_sources(workspace, store)?;
     let schema = workspace.schema(store)?;
     let resolver = workspace.resolver(Some(crate::now_rfc3339()));
     let renderer = Renderer { team: &team };

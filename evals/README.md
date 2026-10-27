@@ -157,6 +157,34 @@ Writes `target/eval/report.md` (pass counts per task, criterion and
 condition), `results.json`, and one transcript per run that can be replayed as
 a regression test.
 
+## Spending fewer tokens
+
+The report has a token table per condition: the agent's requests, new and
+cached input and output, and the person's and judge's totals, as the models
+reported them. `onto-eval` prints the run's total at the end. To keep runs
+cheap:
+
+- **Replay instead of rerunning.** Conversations recorded in
+  `evals/recorded/` replay in CI on every change, at no token cost. A failure
+  means the ontology now answers those calls differently: check the change,
+  then re-record with a live run.
+- **Run live only when tasks, tools or skills change**, with `runs: 1` and the
+  comparison that matters (e.g. `conditions: ods_only,both`, or `task` for one
+  task).
+- **Helpers are cheap.** The judge answers all of a conversation's questions
+  in one request. For Claude Code the judge and the simulated person replace
+  Claude Code's own system prompt instead of loading it, and the workflow runs
+  them on Haiku (`ONTO_JUDGE_MODEL`, `ONTO_HUMAN_MODEL`). `judge: false`
+  skips them entirely.
+- **Use the free `local` provider for routine runs**, and Claude for a final check.
+
+Agents themselves spend fewer tokens because the ontology's answers are
+compact (one line per fact; `detail: full` for provenance), leave facts only
+dbt asserts to ODS (`include: all` to get them), and `ontology_context`
+answers in one call what used to take a search, an entity and its
+neighbours. The `steno` skill, given in every condition, keeps working notes
+brief and the final answer complete.
+
 Eight tasks are a starting point, not a benchmark. Add tasks from real
 modelling questions as they come up; small differences between conditions
 mean little until there are more tasks and runs.

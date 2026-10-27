@@ -9,7 +9,7 @@
 use anyhow::Result;
 use serde::Deserialize;
 
-use crate::agent::{Reply, ScriptedHuman};
+use crate::agent::{Reply, ScriptedHuman, TokenUsage};
 use crate::eval::{Agent, ask};
 use crate::transcript::{Event, Transcript};
 
@@ -79,11 +79,13 @@ pub struct SimulatedHuman {
     replies: usize,
     /// Who accepts proposals, recorded on the acceptance.
     pub accepted_by: String,
+    /// Tokens the person's model used so far.
+    pub usage: TokenUsage,
 }
 
 impl SimulatedHuman {
     pub fn new(persona: Persona, model: Agent) -> Self {
-        Self { persona, model, replies: 0, accepted_by: "simulated-person".into() }
+        Self { persona, model, replies: 0, accepted_by: "simulated-person".into(), usage: TokenUsage::default() }
     }
 }
 
@@ -123,7 +125,8 @@ impl Person for SimulatedHuman {
         }
         self.replies += 1;
         let prompt = format!("The conversation so far:\n\n{}\n\nWrite your next message to the assistant, or DONE.", person_view(transcript));
-        let text = ask(&self.model, &self.persona.system_prompt(), &prompt).await?;
+        let (text, usage) = ask(&self.model, &self.persona.system_prompt(), &prompt).await?;
+        self.usage += usage;
         Ok(parse_reply(&text, self.persona.accepts_proposals, &self.accepted_by))
     }
 }
@@ -132,6 +135,16 @@ impl Person for SimulatedHuman {
 pub enum Human {
     Scripted(ScriptedHuman),
     Simulated(Box<SimulatedHuman>),
+}
+
+impl Human {
+    /// Tokens the person's model used; none for a script.
+    pub fn usage(&self) -> TokenUsage {
+        match self {
+            Human::Scripted(_) => TokenUsage::default(),
+            Human::Simulated(h) => h.usage,
+        }
+    }
 }
 
 impl Person for Human {

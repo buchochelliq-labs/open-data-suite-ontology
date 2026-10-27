@@ -40,10 +40,12 @@ fn each_condition_gets_matching_grounding_guidance() {
     let baseline = system_prompt(Condition::ODS_ONLY, None);
     assert!(baseline.starts_with(SYSTEM_PROMPT) && baseline.contains(ODS_GUIDANCE), "the baseline gets equivalent ODS guidance");
     assert!(!baseline.contains("ontology_"), "the baseline names no ontology tools");
+    assert!(baseline.contains("# Steno: brief while working"), "every condition gets the same working style");
     for condition in [Condition::ONTOLOGY_ONLY, Condition::BOTH] {
         let prompt = system_prompt(condition, None);
         assert!(prompt.starts_with(SYSTEM_PROMPT));
         assert!(prompt.contains("# Ground a design in the ontology"), "{condition:?}");
+        assert!(prompt.contains("# Steno: brief while working, clear when answering"), "{condition:?}");
         assert!(!prompt.contains("name: ontology-grounding"), "front matter is stripped");
     }
 }
@@ -137,7 +139,7 @@ async fn conversations_render_as_a_readable_chat() {
     assert!(chat.contains("**🧑 Person:** I'm designing the customer dimension"), "{chat}");
     assert!(chat.contains("🔧 **ontology_entity**"));
     assert!(chat.contains("\"id\": \"concept:customer\""), "arguments are shown in full");
-    assert!(chat.contains("Finance only counts customers"), "tool results are shown in full, not clipped");
+    assert!(chat.contains("An account holder with at least one completed order."), "tool results are shown in full, not clipped");
     assert!(chat.contains("**🤖 Agent:** A customer is an account holder."));
     assert!(chat.contains("| grounded | Pass |"));
 }
@@ -195,4 +197,36 @@ fn characters_read_count_what_the_agent_received() {
     assert_eq!(Exploration::of(&transcript, None).chars_read, 10_000 + 11);
     assert_eq!(capped.entities, 1);
     assert_eq!(capped.empty_searches, vec!["ontology_search: revenue".to_string()]);
+}
+
+#[tokio::test]
+async fn every_judged_question_goes_in_one_request() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("two-questions.yaml"),
+        r#"
+name: two-questions
+fixture: shop
+conditions: [ontology_only]
+prompt: What is a customer?
+criteria:
+  - { id: grounded, judge: "Is the answer grounded?" }
+  - { id: concise, judge: "Is the answer concise?" }
+  - { id: missing, judge: "A question the judge forgets." }
+"#,
+    )
+    .unwrap();
+    let tasks = Task::load_dir(dir.path()).unwrap();
+    let (agent_url, _) = serve(vec![say("An account holder.")]).await;
+    let (judge_url, judge_requests) =
+        serve(vec![say(r#"{"grounded": {"pass": true, "reason": "Cites a source."}, "concise": {"pass": false, "reason": "Too long."}}"#)]).await;
+    let (agent, judge) = (Agent::Api(config(agent_url)), Agent::Api(config(judge_url)));
+    let cast = Cast { judge: Some(&judge), ..Cast::new(&agent) };
+    let result = run_task(&tasks[0], Condition::ONTOLOGY_ONLY, 1, cast).await.unwrap();
+    let outcome = |id: &str| result.criteria.iter().find(|c| c.id == id).unwrap().outcome;
+    assert_eq!((outcome("grounded"), outcome("concise"), outcome("missing")), (Outcome::Pass, Outcome::Fail, Outcome::Error));
+    let requests = judge_requests.lock().unwrap();
+    assert_eq!(requests.len(), 1, "one judge request for three questions");
+    let prompt = requests[0]["messages"][1]["content"].as_str().unwrap();
+    assert!(prompt.contains("- grounded: Is the answer grounded?") && prompt.contains("- concise: Is the answer concise?"));
 }

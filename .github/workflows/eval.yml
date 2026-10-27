@@ -141,6 +141,8 @@ jobs:
             # The subscription token must be used, so no API key may be set.
             unset ANTHROPIC_API_KEY
             export CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_TOKEN" ONTO_AGENT=claude-code ONTO_CLAUDE_MODEL="$MODEL"
+            # The judge and the simulated person answer short questions: a small model is enough.
+            export ONTO_JUDGE_MODEL=haiku ONTO_HUMAN_MODEL=haiku
             echo "provider=claude-code model=${MODEL:-default} runs=$RUNS"
             cargo run -p onto-testkit --features llm --bin onto-eval -- "${ARGS[@]}" 2>&1 | tee target/eval/live.log
             exit 0
