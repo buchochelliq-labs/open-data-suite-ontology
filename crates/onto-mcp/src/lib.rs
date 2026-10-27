@@ -94,8 +94,9 @@ pub struct EntityResponse {
     pub entity: EntityView,
     /// Predicates whose conflict no configured priority could settle. Ask the user.
     pub unresolved_conflicts: Vec<String>,
-    /// Closest matches when the id is unknown.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    /// Closest matches when the id is unknown. Omitted when empty, so the
+    /// schema must not require it (`default`); strict hosts reject the result otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub suggestions: Vec<String>,
     pub notice: String,
 }

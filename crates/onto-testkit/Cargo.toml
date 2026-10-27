@@ -13,6 +13,7 @@ llm = ["dep:reqwest", "dep:clap"]
 [dependencies]
 anyhow.workspace = true
 clap = { workspace = true, optional = true }
+jsonschema.workspace = true
 onto-core.workspace = true
 onto-mcp.workspace = true
 onto-store.workspace = true
