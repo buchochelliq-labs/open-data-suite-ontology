@@ -136,7 +136,11 @@ jobs:
           if [ -n "$TASK" ]; then ARGS+=(--task "$TASK"); fi
           if [ "$JUDGE" != "true" ]; then ARGS+=(--no-judge); fi
           if [ -n "$MAX_REQUESTS" ]; then ARGS+=(--max-requests "$MAX_REQUESTS"); fi
-          cargo run -p onto-testkit --features llm --bin onto-eval -- "${ARGS[@]}"
+          # The live conversation log goes to the job output and, for cancelled
+          # runs too, to target/eval/live.log in the uploaded artifact.
+          mkdir -p target/eval
+          set -o pipefail
+          cargo run -p onto-testkit --features llm --bin onto-eval -- "${ARGS[@]}" 2>&1 | tee target/eval/live.log
 
       - name: Summary
         if: always()

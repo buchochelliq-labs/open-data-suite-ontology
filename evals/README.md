@@ -87,6 +87,13 @@ ONTO_LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai ONTO_L
 ONTO_LLM_API_KEY=<key> cargo run -p onto-testkit --features llm --bin onto-eval -- --runs 1
 ```
 
+While it runs, the job output shows the conversation live: each message the
+person sends, each model request and how long it took, each tool call with its
+arguments and (shortened) result, and each criterion's score. The same log is
+saved to `target/eval/live.log`, which is uploaded even when a run is
+cancelled. A tool call that takes more than 60 s, or a conversation that takes
+more than 15 minutes, is recorded as an error instead of stalling the run.
+
 Writes `target/eval/report.md` (pass counts per task, criterion and
 condition), `results.json`, and one transcript per run that can be replayed as
 a regression test.

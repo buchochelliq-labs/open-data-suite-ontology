@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use onto_testkit::agent::{ModelConfig, RequestBudget};
-use onto_testkit::eval::{Condition, RunResult, Task, errors, report, run_task};
+use onto_testkit::eval::{Condition, RunResult, Task, errors, render, report, run_task};
 use onto_testkit::fixture::repo_root;
 
 #[derive(Parser)]
@@ -82,10 +82,14 @@ async fn main() -> Result<()> {
             results.push(RunResult::not_run(task, condition, run, reason.clone()));
             continue;
         }
-        eprintln!("{} / {} / run {run}", task.name, condition.name());
+        eprintln!("\n=== {} / {} / run {run} ===", task.name, condition.name());
         let result = run_task(task, condition, run, &agent, judge.as_ref()).await?;
-        let file = out.join("transcripts").join(format!("{}-{}-{run}.jsonl", task.name, condition.name()));
-        std::fs::write(file, result.transcript.to_jsonl())?;
+        let stem = out.join("transcripts").join(format!("{}-{}-{run}", task.name, condition.name()));
+        std::fs::write(stem.with_extension("jsonl"), result.transcript.to_jsonl())?;
+        std::fs::write(
+            stem.with_extension("md"),
+            format!("# {} / {} / run {run}\n\n```text\n{}\n```\n", task.name, condition.name(), render(&result.transcript)),
+        )?;
         if result.budget_exhausted {
             stopped = Some("not run: request budget exhausted earlier in this run".into());
         }

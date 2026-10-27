@@ -20,7 +20,10 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::agent::{ModelConfig, Reply, ScriptedHuman, complete, is_budget_exhausted, run_episode};
+use crate::agent::{ModelConfig, Reply, ScriptedHuman, chat, complete, is_budget_exhausted, run_episode};
+
+/// Longest one conversation may take before it is recorded as an error.
+const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15 * 60);
 use crate::fixture::{Fixture, ods_available, ods_binary};
 use crate::invariants;
 use crate::session::Session;
@@ -163,7 +166,8 @@ fn answer(transcript: &Transcript) -> String {
     transcript.agent_texts().collect::<Vec<_>>().join("\n").to_lowercase()
 }
 
-fn render(transcript: &Transcript) -> String {
+/// A transcript as plain text, one line per event (used for the judge).
+pub fn render(transcript: &Transcript) -> String {
     transcript
         .events
         .iter()
@@ -269,7 +273,10 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Mod
     if let Some(turns) = task.max_turns {
         config.max_turns = turns;
     }
-    let episode = run_episode(&mut session, &config, SYSTEM_PROMPT, &task.prompt, &mut human).await;
+    let episode = match tokio::time::timeout(RUN_TIMEOUT, run_episode(&mut session, &config, SYSTEM_PROMPT, &task.prompt, &mut human)).await {
+        Ok(outcome) => outcome,
+        Err(_) => Err(anyhow::anyhow!("the conversation did not finish within {} minutes", RUN_TIMEOUT.as_secs() / 60)),
+    };
     let transcript = session.close().await?;
     match episode {
         Ok(stats) => {
@@ -277,6 +284,7 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Mod
             result.failed_tool_calls = stats.failed_tool_calls;
         }
         Err(e) => {
+            chat(format!("· ERROR: {e:#}"));
             result.budget_exhausted = is_budget_exhausted(&e);
             result.error = Some(format!("{e:#}"));
         }
@@ -288,6 +296,7 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Mod
     let http = reqwest::Client::builder().timeout(agent.timeout).build()?;
     for criterion in &task.criteria {
         let scored = score(criterion, &transcript, judge_model, &http).await;
+        chat(format!("· {} {:?}: {}", criterion.id, scored.outcome, scored.detail));
         if scored.outcome == Outcome::Error && scored.detail.contains("request budget exhausted") {
             result.budget_exhausted = true;
         }

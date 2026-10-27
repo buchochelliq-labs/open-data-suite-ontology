@@ -159,6 +159,23 @@ async fn pace(config: &ModelConfig) {
     tokio::time::sleep_until(slot).await;
 }
 
+/// Longest a single MCP tool call may take before it counts as failed.
+const TOOL_TIMEOUT: Duration = Duration::from_secs(60);
+
+/// Print one line of the live conversation log to stderr, unless
+/// `ONTO_LOG_QUIET` is set. In CI this is what shows the run's progress.
+pub fn chat(line: String) {
+    if std::env::var_os("ONTO_LOG_QUIET").is_none() {
+        for (i, part) in line.lines().enumerate() {
+            eprintln!("{}{part}", if i == 0 { "    " } else { "      " });
+        }
+    }
+}
+
+fn clip(text: &str, max: usize) -> String {
+    if text.chars().count() <= max { text.to_string() } else { format!("{}… ({} chars)", text.chars().take(max).collect::<String>(), text.chars().count()) }
+}
+
 /// Attempts per request when the endpoint is rate-limited or briefly unavailable.
 const ATTEMPTS: u32 = 6;
 /// Longest single wait, whatever `Retry-After` asks for.
@@ -236,7 +253,7 @@ fn portable_schema(schema: &serde_json::Map<String, Value>) -> Value {
 /// Run one conversation: `opening` from the person, then alternate model turns
 /// (with tool calls) and scripted replies until the script ends or `max_turns`.
 pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_prompt: &str, opening: &str, human: &mut ScriptedHuman) -> Result<EpisodeStats> {
-    let http = reqwest::Client::builder().timeout(config.timeout).build()?;
+    let http = reqwest::Client::builder().timeout(config.timeout).connect_timeout(Duration::from_secs(30)).build()?;
     let tools: Vec<Value> = session
         .tools()
         .await?
@@ -249,27 +266,49 @@ pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_pro
     };
     let mut messages = vec![json!({ "role": "system", "content": system }), json!({ "role": "user", "content": opening })];
     session.human_says(opening);
+    chat(format!("USER: {opening}"));
     let mut stats = EpisodeStats::default();
 
     while stats.turns < config.max_turns {
         stats.turns += 1;
+        chat(format!("· model request {} ({} messages, {} tools)", stats.turns, messages.len(), tools.len()));
+        let started = std::time::Instant::now();
         let message = complete(&http, config, &messages, &tools).await?;
+        chat(format!("· model replied in {:.1}s", started.elapsed().as_secs_f64()));
         let calls = message["tool_calls"].as_array().cloned().unwrap_or_default();
         let text = message["content"].as_str().unwrap_or_default().trim().to_string();
         messages.push(message);
 
         if !calls.is_empty() {
+            if !text.is_empty() {
+                chat(format!("ASSISTANT: {text}"));
+            }
             for call in calls {
                 let name = call["function"]["name"].as_str().unwrap_or_default().to_string();
                 let raw = call["function"]["arguments"].as_str().unwrap_or("{}");
+                chat(format!("ASSISTANT → {name} {raw}"));
                 stats.tool_calls += 1;
                 let content = match serde_json::from_str::<Value>(if raw.trim().is_empty() { "{}" } else { raw }) {
                     Ok(arguments) => {
-                        let (ok, result) = session.call(&name, arguments).await?;
+                        let started = std::time::Instant::now();
+                        let (ok, result) = match tokio::time::timeout(TOOL_TIMEOUT, session.call(&name, arguments.clone())).await {
+                            Ok(outcome) => outcome?,
+                            Err(_) => {
+                                let message = format!("tool call timed out after {}s", TOOL_TIMEOUT.as_secs());
+                                session.transcript.events.push(Event::ToolCall {
+                                    tool: name.clone(),
+                                    arguments,
+                                    ok: false,
+                                    result: Value::String(message.clone()),
+                                });
+                                (false, Value::String(message))
+                            }
+                        };
                         if !ok {
                             stats.failed_tool_calls += 1;
                         }
                         let body = if ok { result.to_string() } else { format!("error: {result}") };
+                        chat(format!("TOOL {name} {} in {:.1}s: {}", if ok { "ok" } else { "FAILED" }, started.elapsed().as_secs_f64(), clip(&body, 600)));
                         truncate(body, config.max_tool_result_chars)
                     }
                     Err(e) => {
@@ -280,6 +319,7 @@ pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_pro
                             ok: false,
                             result: Value::String(e.to_string()),
                         });
+                        chat(format!("TOOL {name} FAILED: arguments are not valid JSON: {e}"));
                         format!("error: arguments are not valid JSON: {e}")
                     }
                 };
@@ -288,6 +328,7 @@ pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_pro
             continue;
         }
 
+        chat(format!("ASSISTANT: {}", if text.is_empty() { "(empty reply)" } else { &text }));
         session.agent_says(&text);
         let reply = match human.next() {
             Reply::Say(text) => text,
@@ -301,15 +342,23 @@ pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_pro
                 match digest {
                     Some(digest) => {
                         session.human_accepts(&digest, &by)?;
+                        chat(format!("USER ACTION: accepted proposal {digest}"));
                         format!("I accepted proposal {digest} with the onto CLI.")
                     }
                     None => "I don't see a proposal to accept.".to_string(),
                 }
             }
-            Reply::End => break,
+            Reply::End => {
+                chat("· the person ends the conversation".to_string());
+                break;
+            }
         };
+        chat(format!("USER: {reply}"));
         session.human_says(&reply);
         messages.push(json!({ "role": "user", "content": reply }));
+    }
+    if stats.turns >= config.max_turns {
+        chat(format!("· stopped after {} model turns", config.max_turns));
     }
     Ok(stats)
 }
