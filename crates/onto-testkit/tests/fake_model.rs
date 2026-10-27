@@ -156,3 +156,26 @@ async fn the_run_budget_caps_requests() {
     assert_eq!(seen.lock().unwrap().len(), 2);
     assert_eq!(budget.used(), 2);
 }
+
+#[tokio::test]
+async fn a_provider_that_does_not_answer_is_retried_after_the_timeout() {
+    use tokio::net::TcpListener;
+    // First connection: accept and never answer. Second: answer normally.
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let silent_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    let (answer_url, _) = fake_model(vec![say("Hello.")]).await;
+    let answer_addr = answer_url.trim_start_matches("http://").trim_end_matches("/v1").to_string();
+    tokio::spawn(async move {
+        let (_hold, _) = listener.accept().await.unwrap();
+        // Forward the next connection to the answering server.
+        let (mut inbound, _) = listener.accept().await.unwrap();
+        let mut outbound = tokio::net::TcpStream::connect(answer_addr).await.unwrap();
+        let _ = tokio::io::copy_bidirectional(&mut inbound, &mut outbound).await;
+        drop(_hold);
+    });
+    let fixture = Fixture::new("shop").unwrap();
+    let mut session = Session::start(&fixture).await.unwrap();
+    let config = ModelConfig { timeout: std::time::Duration::from_millis(300), ..quick(silent_url) };
+    run_episode(&mut session, &config, "system", "Hi", &mut ScriptedHuman::new([Reply::End])).await.unwrap();
+    assert_eq!(session.close().await.unwrap().agent_texts().collect::<Vec<_>>(), vec!["Hello."]);
+}

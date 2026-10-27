@@ -94,6 +94,12 @@ saved to `target/eval/live.log`, which is uploaded even when a run is
 cancelled. A tool call that takes more than 60 s, or a conversation that takes
 more than 15 minutes, is recorded as an error instead of stalling the run.
 
+Free tiers are sometimes overloaded and answer `503 Service Unavailable`, or
+not at all. In the workflow, hosted requests time out after 2 minutes
+(`ONTO_LLM_TIMEOUT_SECS`) and, like 503s, are retried with backoff; each retry
+appears in the log with the provider's message. If a model stays overloaded,
+try another model, e.g. `gemini-flash-lite-latest`.
+
 Writes `target/eval/report.md` (pass counts per task, criterion and
 condition), `results.json`, and one transcript per run that can be replayed as
 a regression test.

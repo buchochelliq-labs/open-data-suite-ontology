@@ -125,13 +125,16 @@ jobs:
           esac
           # Pace requests below the provider's per-minute limit instead of hitting it.
           export ONTO_LLM_RPM="${RPM:-$PACE}"
+          # Hosted providers answer within seconds; an overloaded one can hang, so
+          # give up on a request after 2 minutes (and retry). A CPU model needs longer.
+          if [ "$PROVIDER" = "local" ]; then export ONTO_LLM_TIMEOUT_SECS=900; else export ONTO_LLM_TIMEOUT_SECS=120; fi
           if [ -z "$BASE" ]; then echo "::error::base_url is required for the custom provider"; exit 1; fi
           if [ "$PROVIDER" != "local" ] && [ -z "$KEY" ]; then
             echo "::error::no API key: add the repository secret for the $PROVIDER provider (see the comment at the top of eval.yml)"; exit 1
           fi
           export ONTO_LLM_BASE_URL="$BASE" ONTO_LLM_API_KEY="$KEY" ONTO_LLM_MODEL="${MODEL:-$DEFAULT}"
           if [ -z "$ONTO_LLM_MODEL" ]; then echo "::error::set the model input"; exit 1; fi
-          echo "provider=$PROVIDER model=$ONTO_LLM_MODEL runs=$RUNS requests_per_minute=${ONTO_LLM_RPM:-unlimited}"
+          echo "provider=$PROVIDER model=$ONTO_LLM_MODEL runs=$RUNS requests_per_minute=${ONTO_LLM_RPM:-unlimited} request_timeout=${ONTO_LLM_TIMEOUT_SECS}s"
           ARGS=(--runs "$RUNS" --conditions "$CONDITIONS")
           if [ -n "$TASK" ]; then ARGS+=(--task "$TASK"); fi
           if [ "$JUDGE" != "true" ]; then ARGS+=(--no-judge); fi

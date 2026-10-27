@@ -216,7 +216,18 @@ pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messa
         if let Some(budget) = &config.budget {
             budget.take()?;
         }
-        let response = request.send().await.context("calling the model")?;
+        let started = std::time::Instant::now();
+        let response = match request.send().await {
+            Ok(response) => response,
+            // A provider that does not answer within the timeout is treated like an overload.
+            Err(e) if e.is_timeout() && attempt < ATTEMPTS => {
+                let wait = Duration::from_secs(2u64.pow(attempt)).min(MAX_WAIT);
+                chat(format!("· model did not answer within {}s; retrying in {}s (attempt {attempt}/{ATTEMPTS})", config.timeout.as_secs(), wait.as_secs()));
+                tokio::time::sleep(wait).await;
+                continue;
+            }
+            Err(e) => return Err(e).context("calling the model"),
+        };
         let status = response.status();
         let retry_after = response.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse::<u64>().ok());
         let text = response.text().await.context("reading the model response")?;
@@ -229,7 +240,12 @@ pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messa
                 .map(|secs| Duration::from_secs(secs + 1))
                 .unwrap_or_else(|| Duration::from_secs(2u64.pow(attempt)))
                 .min(MAX_WAIT);
-            eprintln!("model returned {status}; retrying in {}s (attempt {attempt}/{ATTEMPTS})", wait.as_secs());
+            chat(format!(
+                "· model returned {status} after {:.1}s ({}); retrying in {}s (attempt {attempt}/{ATTEMPTS})",
+                started.elapsed().as_secs_f64(),
+                clip(text.trim(), 160),
+                wait.as_secs()
+            ));
             tokio::time::sleep(wait).await;
             continue;
         }
