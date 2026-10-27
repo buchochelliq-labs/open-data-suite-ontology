@@ -74,6 +74,24 @@ It never changes `onto.toml` or `onto.lock`; a locally disabled source keeps its
 pin for everyone else. `onto init` adds `.onto/` to `.gitignore`, and every
 command warns if it is not ignored.
 
+### Possible later: export and import of synced facts
+
+Not planned yet; recorded so that current choices keep it possible. Someone
+could export their synced facts and a teammate import them, for example to
+onboard without access to every source, or to hand a snapshot to CI.
+
+- **Format.** The RDF export (one named graph per source, provenance kept) or a
+  JSON-lines dump of records. Both already carry everything needed.
+- **Import is its own source** (e.g. kind `snapshot`). Imported records take the
+  importing source's id, as every source must, and keep the original
+  source, version and `retrieved_at` in provenance (a `via` field to add then).
+  Authority is never upgraded.
+- **Your own sync wins.** An imported fact ranks below the same source synced
+  locally, and shows its export time so its age is visible.
+- **Access.** Exporting hands over facts the recipient may not be entitled to
+  read. The exporter decides, and `onto.toml` would mark which sources may be
+  exported at all (default: none). Integrity by content hash, optionally signed.
+
 ## Sources and sync
 
 ```rust
