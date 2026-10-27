@@ -8,6 +8,8 @@ steps:
       - { path: /sources/0/layer, equals: central }
       - { path: /priority, equals: [repo, central] }
       - { path: /pending_proposals, equals: 0 }
+      - { path: /disabled_sources, equals: [] }
+      - { path: /sync_scope, contains: "Teammates sync independently" }
 
   # Aliases from the central pack make "client" find the customer concept.
   - call: ontology_search

@@ -109,7 +109,9 @@ fn init(root: &std::path::Path, central: Option<String>, central_path: String) -
     text.push_str("\n[[source]]\nid = \"repo\"\nlayer = \"repository\"\nkind = \"pack\"\npath = \".ontology\"\n");
     std::fs::create_dir_all(root.join(".ontology"))?;
     std::fs::write(&config, text)?;
-    println!("Created {} and .ontology/. Add `.onto/` to .gitignore, then run `onto sync`.", config.display());
+    let ignored = onto_workspace::local::ignore_state_dir(root)?;
+    println!("Created {} and .ontology/.{} Commit them, then run `onto sync`.", config.display(), if ignored { " Added .onto/ to .gitignore." } else { "" });
+    println!("Each person runs `onto sync` on their own machine; synced facts stay in .onto/ and are never committed.");
     Ok(())
 }
 
@@ -127,6 +129,9 @@ async fn run(cli: Cli) -> Result<ExitCode> {
     if let Command::Mcp = cli.command {
         onto_mcp::serve_stdio(workspace).await?;
         return Ok(ExitCode::SUCCESS);
+    }
+    if onto_workspace::local::state_dir_ignored(&workspace.root) == Some(false) {
+        eprintln!("warning: .onto/ is not git-ignored. It holds facts synced with your own access; add `.onto/` to .gitignore so they are never committed.");
     }
     let mut store = workspace.open_store()?;
     match cli.command {
@@ -158,7 +163,11 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                     s.version.unwrap_or_default()
                 );
             }
+            for id in &workspace.disabled {
+                println!("{id:<16} disabled on this machine (.onto/local.toml)");
+            }
             println!("pending proposals: {}", proposals::pending(&store)?.len());
+            println!("External facts reflect this machine's last sync; teammates sync independently.");
         }
         Command::Search { query, limit } => {
             for hit in store.search(&query, limit)? {

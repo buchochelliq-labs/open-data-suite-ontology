@@ -37,8 +37,15 @@ pub struct StatusResponse {
     /// Source ids, highest priority first; only these can win a conflict.
     pub priority: Vec<String>,
     pub pending_proposals: usize,
+    /// Sources this person has disabled locally; their facts are absent here.
+    pub disabled_sources: Vec<String>,
+    /// How to read these facts: synced on this machine, with this person's access.
+    pub sync_scope: String,
     pub notice: String,
 }
+
+const SYNC_SCOPE: &str = "Facts from external sources were synced on this machine with this person's access, at the synced_at shown per source. \
+Teammates sync independently and may see different or newer facts. Do not ask the user to share synced facts; shared knowledge goes through proposals.";
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SearchRequest {
@@ -146,6 +153,8 @@ impl OntologyServer {
                 resolution_mode: ws.resolution_mode(),
                 priority: ws.config.resolution.priority.clone(),
                 pending_proposals: store.proposals(Some(ProposalStatus::Pending)).map_err(err)?.len(),
+                disabled_sources: ws.disabled.clone(),
+                sync_scope: SYNC_SCOPE.into(),
                 notice: NOTICE.into(),
             }))
         })

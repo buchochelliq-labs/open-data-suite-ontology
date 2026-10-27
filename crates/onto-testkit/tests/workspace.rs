@@ -77,3 +77,30 @@ fn command_sources_cannot_choose_their_identity() {
     assert_eq!(records[0].provenance.authority, onto_core::Authority::Observed);
     assert_eq!(records[0].provenance.locator.as_deref(), Some("catalog://main.shop.orders"));
 }
+
+#[test]
+fn a_source_disabled_locally_keeps_the_shared_lock_and_config() {
+    let fixture = Fixture::new("shop").unwrap();
+    let config_before = std::fs::read_to_string(fixture.root.join("onto.toml")).unwrap();
+    let lock_before = std::fs::read_to_string(fixture.root.join("onto.lock")).unwrap();
+    std::fs::write(fixture.root.join(".onto/local.toml"), "[[source]]\nid = \"central\"\nenabled = false\n").unwrap();
+
+    let workspace = fixture.workspace().unwrap();
+    assert_eq!(workspace.disabled, vec!["central".to_string()]);
+    assert_eq!(workspace.config.resolution.priority, vec!["repo".to_string()]);
+    let mut store = workspace.open_store().unwrap();
+    workspace.sync(&mut store, &SyncOptions::default()).unwrap();
+
+    assert!(store.sources().unwrap().iter().all(|s| s.source_id != "central"), "disabled facts are dropped from this machine");
+    assert_eq!(std::fs::read_to_string(fixture.root.join("onto.lock")).unwrap(), lock_before, "the shared pin is untouched");
+    assert_eq!(std::fs::read_to_string(fixture.root.join("onto.toml")).unwrap(), config_before);
+}
+
+#[test]
+fn local_overrides_are_checked() {
+    let fixture = Fixture::new("shop").unwrap();
+    std::fs::write(fixture.root.join(".onto/local.toml"), "[[source]]\nid = \"nope\"\nenabled = false\n").unwrap();
+    assert!(fixture.workspace().is_err());
+    std::fs::write(fixture.root.join(".onto/local.toml"), "[[source]]\nid = \"repo\"\ncommand = [\"x\"]\n").unwrap();
+    assert!(fixture.workspace().err().unwrap().to_string().contains("does not apply"));
+}

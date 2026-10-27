@@ -7,6 +7,7 @@ use serde::Serialize;
 use crate::command::CommandSource;
 use crate::config::{CONFIG_FILE, Config, SourceConfig, SourceKind};
 use crate::git::GitSource;
+use crate::local::LocalConfig;
 use crate::lock::{Lock, LockedSource};
 use crate::pack::PackSource;
 
@@ -32,7 +33,10 @@ pub fn now_rfc3339() -> String {
 
 pub struct Workspace {
     pub root: PathBuf,
+    /// Shared configuration with this machine's `.onto/local.toml` applied.
     pub config: Config,
+    /// Sources disabled on this machine. Their lock entries are kept.
+    pub disabled: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -68,8 +72,11 @@ impl Workspace {
         let root = root.into();
         let path = root.join(CONFIG_FILE);
         let text = std::fs::read_to_string(&path).map_err(|e| WorkspaceError::Config(format!("cannot read {}: {e}", path.display())))?;
-        let config: Config = toml::from_str(&text).map_err(|e| WorkspaceError::Config(format!("{}: {e}", path.display())))?;
-        let workspace = Self { root, config };
+        let shared: Config = toml::from_str(&text).map_err(|e| WorkspaceError::Config(format!("{}: {e}", path.display())))?;
+        Self { root: root.clone(), config: shared.clone(), disabled: Vec::new() }.validate()?;
+        let mut config = shared;
+        let disabled = LocalConfig::read(&root)?.apply(&mut config)?;
+        let workspace = Self { root, config, disabled };
         workspace.validate()?;
         Ok(workspace)
     }
@@ -188,6 +195,13 @@ impl Workspace {
                 }
             };
             reports.push(SyncReport { source_id: source.id.clone(), outcome });
+        }
+
+        // A source disabled on this machine keeps its pin for everyone else.
+        if let Some(lock) = &lock {
+            for previous in lock.sources.iter().filter(|s| self.disabled.contains(&s.id)) {
+                new_lock.sources.push(previous.clone());
+            }
         }
 
         for stale in store.sources()? {

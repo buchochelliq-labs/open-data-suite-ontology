@@ -9,6 +9,7 @@
 | Build our own graph, or adopt Graphiti/Cognee? | Build our own core. Graphiti's LLM-driven ingestion is non-deterministic (bad for CI and review), needs a graph-database service and has no notion of authority or review. It can later be a *source* producing `proposed` or `inferred` claims from unstructured material. We took its bi-temporal idea: claim validity (`valid.from/until`) is separate from when we learned it (`retrieved_at`, `source_version`). |
 | Storage | SQLite with FTS5 and indexed edges, following dbt-skills ADR 0001. Encryption at rest (SQLCipher through `rusqlite`'s `bundled-sqlcipher`) is a planned feature flag. Graphiti would not help here. |
 | How is curated context shared across a team? | Through git now; a hosted service later. Raw episodes stay on the machine; curated claims are shared as `inferred` packs and promoted to `reviewed` by a person in a PR. |
+| Facts from external sources | Each person syncs them independently into their own `.onto/`, with their own access. They are never committed or shared; shared files refer to external facts by id only. |
 | UX | Deferred. The CLI and MCP server come first. |
 | Python | PyO3 bindings later. Python providers can already plug in today as `command` sources. |
 
@@ -43,6 +44,35 @@ every source. On a single-valued predicate, distinct values form a conflict:
 
 Cardinality comes from `onto:cardinality` claims, then built-ins. Otherwise
 literal-valued predicates are single-valued and relations are multi-valued.
+
+## What is shared and what each person syncs
+
+| Shared through git | Per person, in `.onto/` (git-ignored) |
+|---|---|
+| `onto.toml`: which sources, priority | Facts synced from external sources (ODS, central packs, catalogs, studios) |
+| `onto.lock`: pinned central commits | The store and its search index |
+| Authored packs (`.ontology/`), accepted proposals | Pending proposals |
+| Curated `inferred` claims, once shared | Raw episodes for curated memory |
+| | `.onto/local.toml`: per-person overrides |
+
+Why per person:
+- **Access.** Each person syncs with their own credentials. No one sees a fact
+  from a catalog or warehouse they could not read themselves, and no access
+  check is bypassed by a teammate's copy.
+- **Nothing synced is committed.** Shared files such as accepted proposals refer
+  to external facts by id (`model.jaffle_ods.orders`). They never copy them.
+- **Freshness is visible.** `ontology_status` shows each source's `synced_at` and
+  version, and tells the agent that teammates sync independently.
+
+Consistency comes from the shared configuration: `onto.lock` pins central
+packs, and `onto sync --locked` reproduces them in CI. Sources that read local
+state (ODS reads the person's dbt `target/`) reflect that machine.
+
+`.onto/local.toml` adjusts sources for one machine, for example disabling a
+source the person cannot access, or pointing at their `ods` binary or dbt target.
+It never changes `onto.toml` or `onto.lock`; a locally disabled source keeps its
+pin for everyone else. `onto init` adds `.onto/` to `.gitignore`, and every
+command warns if it is not ignored.
 
 ## Sources and sync
 

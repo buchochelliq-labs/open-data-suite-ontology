@@ -4,6 +4,7 @@
 pub mod command;
 pub mod config;
 pub mod git;
+pub mod local;
 pub mod lock;
 pub mod pack;
 pub mod proposals;
