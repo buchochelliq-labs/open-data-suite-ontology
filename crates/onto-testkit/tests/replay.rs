@@ -56,7 +56,31 @@ async fn recorded_evaluation_conversations_still_replay() {
         let fixture = Fixture::new("jaffle").unwrap();
         let mut session = Session::start(&fixture).await.unwrap();
         let mismatches = replay(&mut session, &ontology).await.unwrap();
-        assert!(mismatches.is_empty(), "{}:\n{}", path.display(), mismatches.join("\n"));
-        session.close().await.unwrap();
+        let replayed = session.close().await.unwrap();
+        if std::env::var_os("ONTO_UPDATE_RECORDINGS").is_some() {
+            // After an intended change: keep the conversation, take the ontology's new answers.
+            let mut answers = replayed.events.iter().filter_map(|e| match e {
+                onto_testkit::Event::ToolCall { result, ok, .. } => Some((*ok, result.clone())),
+                _ => None,
+            });
+            let mut updated = Transcript::from_jsonl(&std::fs::read_to_string(&path).unwrap()).unwrap();
+            for event in &mut updated.events {
+                if let onto_testkit::Event::ToolCall { tool, ok, result, .. } = event
+                    && tool.starts_with("ontology_")
+                    && tool != "ontology_status"
+                    && let Some((now_ok, now)) = answers.next()
+                {
+                    (*ok, *result) = (now_ok, now);
+                }
+            }
+            std::fs::write(&path, updated.to_jsonl()).unwrap();
+            continue;
+        }
+        assert!(
+            mismatches.is_empty(),
+            "{}:\n{}\n\nIf the change is intended, re-record with ONTO_UPDATE_RECORDINGS=1 cargo test -p onto-testkit --test replay",
+            path.display(),
+            mismatches.join("\n")
+        );
     }
 }

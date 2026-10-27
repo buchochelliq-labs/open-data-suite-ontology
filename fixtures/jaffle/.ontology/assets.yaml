@@ -20,3 +20,8 @@ entities:
       grain: one row per order status change
     relations:
       - { predicate: represents, target: concept:order }
+
+  # The finance team's note; notes.yaml has marketing's, which disagrees.
+  - id: model.jaffle_ods.customer_segments
+    properties:
+      grain: one row per customer

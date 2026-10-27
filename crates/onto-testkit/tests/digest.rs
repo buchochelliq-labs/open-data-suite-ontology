@@ -27,7 +27,7 @@ fn the_digest_lists_the_teams_facts_with_sources() {
     assert!(text.contains("sources disagree on definition") && text.contains("_(dbt, declared)_"), "{text}");
     // Facts only ODS asserts (columns, keys) are left to ODS.
     assert!(!text.contains("model.jaffle_ods.orders#order_id"), "{text}");
-    assert!(!text.contains("stg_payments"), "{text}");
+    assert!(!text.contains("stg_customers"), "{text}");
     assert!(text.len() < 16_000);
 }
 

@@ -25,7 +25,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::agent::{ModelConfig, Reply, ScriptedHuman, TokenUsage, chat, complete, is_budget_exhausted, run_episode};
+use crate::agent::{EpisodeStats, ModelConfig, Reply, ScriptedHuman, TokenUsage, chat, complete, is_budget_exhausted, run_episode};
 use crate::fixture::{Fixture, ods_available, ods_binary};
 use crate::human::{Human, Persona, SimulatedHuman};
 use crate::invariants;
@@ -185,6 +185,7 @@ pub struct Task {
     /// The person's opening message.
     pub prompt: String,
     /// The person's replies, in order, whenever the agent stops to talk.
+    /// `ACCEPT` accepts the latest proposal, as a person would with the CLI.
     #[serde(default)]
     pub replies: Vec<String>,
     /// Tool sets that make sense for this task (default: all).
@@ -194,6 +195,23 @@ pub struct Task {
     pub max_turns: Option<usize>,
     /// Who the person is, for runs where a model plays them. Without a
     /// persona, or when no person model is configured, `replies` are used.
+    #[serde(default)]
+    pub persona: Option<Persona>,
+    pub criteria: Vec<Criterion>,
+    /// A second conversation on the same workspace after this one ends:
+    /// accepted proposals carry over, the agent and conversation start fresh.
+    #[serde(default)]
+    pub followup: Option<Followup>,
+}
+
+/// The next session, e.g. a teammate asking later. Its criteria are scored on
+/// that session alone and reported as `followup.<id>`.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Followup {
+    pub prompt: String,
+    #[serde(default)]
+    pub replies: Vec<String>,
     #[serde(default)]
     pub persona: Option<Persona>,
     pub criteria: Vec<Criterion>,
@@ -329,6 +347,9 @@ pub fn render_chat(title: &str, result: &RunResult) -> String {
                     if *ok { "" } else { " (error)" },
                     pretty(result)
                 ));
+            }
+            Event::HumanAction { action, .. } if action == "new_session" => {
+                out.push_str("---\n\n**A later session starts on the same workspace; accepted proposals carry over.**\n\n")
             }
             Event::HumanAction { action, detail } => out.push_str(&format!("**🧑 Person ({action}):** `{detail}`\n\n")),
         }
@@ -478,60 +499,36 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, cast: Cast<
     }
     let fixture = Fixture::new(&task.fixture)?;
     let before = fixture.repository_files()?;
-    let mut human = match (&task.persona, cast.person) {
-        (Some(persona), Some(model)) => Human::Simulated(Box::new(SimulatedHuman::new(persona.clone(), model.clone()))),
-        _ => Human::Scripted(ScriptedHuman::new(task.replies.iter().cloned().map(Reply::Say).chain([Reply::End]))),
-    };
-    let digest = if condition.digest {
-        let workspace = fixture.workspace()?;
-        let store = workspace.open_store()?;
-        Some(onto_workspace::digest::render(&workspace, &store, &onto_workspace::digest::DigestOptions::default())?)
-    } else {
-        None
-    };
-    let system = system_prompt(condition, digest.as_deref());
-    let (episode, transcript) = match agent {
-        Agent::Api(config) => {
-            let mut session = Session::start(&fixture).await?;
-            if condition.needs_ods() {
-                session.attach_ods(&ods_binary(), &fixture.root, &fixture.root.join("target")).await?;
-            }
-            session.restrict(condition.prefixes());
-            let mut config = config.clone();
-            if let Some(turns) = task.max_turns {
-                config.max_turns = turns;
-            }
-            let episode = tokio::time::timeout(run_timeout(), run_episode(&mut session, &config, &system, &task.prompt, &mut human)).await;
-            (episode, session.close().await?)
+    let first = Script { prompt: &task.prompt, replies: &task.replies, persona: task.persona.as_ref() };
+    let (episode, mut transcript, person) = converse(&fixture, condition, cast, task.max_turns, first).await?;
+    result.tokens.person += person;
+    let mut sessions = vec![(episode, transcript.clone(), &task.criteria, "")];
+    if let Some(followup) = &task.followup {
+        // Only a session that ended normally leads to the next one.
+        if sessions[0].0.is_ok() {
+            let next = Script { prompt: &followup.prompt, replies: &followup.replies, persona: followup.persona.as_ref() };
+            chat("· a new session starts on the same workspace".to_string());
+            let (episode, second, person) = converse(&fixture, condition, cast, task.max_turns, next).await?;
+            result.tokens.person += person;
+            transcript
+                .events
+                .push(Event::HumanAction { action: "new_session".into(), detail: json!({ "note": "a later session; accepted proposals carry over" }) });
+            transcript.events.extend(second.events.iter().cloned());
+            sessions.push((episode, second, &followup.criteria, "followup."));
         }
-        Agent::ClaudeCode(config) => {
-            use crate::claude_code::{self, Server};
-            let mut servers = Vec::new();
-            if condition.needs_ontology() {
-                servers.push(Server::onto(config, &fixture));
+    }
+    for (episode, _, _, _) in &mut sessions {
+        match std::mem::replace(episode, Ok(EpisodeStats::default())) {
+            Ok(stats) => {
+                result.tool_calls += stats.tool_calls;
+                result.failed_tool_calls += stats.failed_tool_calls;
+                result.tokens.agent += stats.usage;
             }
-            if condition.needs_ods() {
-                servers.push(Server::ods(&ods_binary(), &fixture));
+            Err(e) => {
+                chat(format!("· ERROR: {e:#}"));
+                result.budget_exhausted |= is_budget_exhausted(&e);
+                result.error.get_or_insert(format!("{e:#}"));
             }
-            let mut transcript = Transcript::default();
-            let episode =
-                tokio::time::timeout(run_timeout(), claude_code::run_episode(&fixture, &servers, config, &system, &task.prompt, &mut human, &mut transcript))
-                    .await;
-            (episode, transcript)
-        }
-    };
-    let episode = episode.unwrap_or_else(|_| Err(anyhow::anyhow!("the conversation did not finish within {} minutes", run_timeout().as_secs() / 60)));
-    result.tokens.person = human.usage();
-    match episode {
-        Ok(stats) => {
-            result.tool_calls = stats.tool_calls;
-            result.failed_tool_calls = stats.failed_tool_calls;
-            result.tokens.agent = stats.usage;
-        }
-        Err(e) => {
-            chat(format!("· ERROR: {e:#}"));
-            result.budget_exhausted = is_budget_exhausted(&e);
-            result.error = Some(format!("{e:#}"));
         }
     }
 
@@ -543,35 +540,109 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, cast: Cast<
     let report = invariants::check(&transcript, &before, &fixture.repository_files()?);
     result.violations = report.violations;
     result.warnings.extend(report.warnings);
-    let questions: Vec<(&str, &str)> = task
-        .criteria
-        .iter()
-        .filter_map(|c| match &c.check {
-            Check::Judge(question) => Some((c.id.as_str(), question.as_str())),
-            _ => None,
-        })
-        .collect();
-    let judged = match judge_model {
-        _ if questions.is_empty() => Judged::NotConfigured,
-        None => Judged::NotConfigured,
-        Some(model) => match judge(model, &questions, &transcript).await {
-            Ok((verdicts, usage)) => {
-                result.tokens.judge += usage;
-                Judged::Answered(verdicts)
+    for (_, session_transcript, criteria, prefix) in &sessions {
+        let questions: Vec<(&str, &str)> = criteria
+            .iter()
+            .filter_map(|c| match &c.check {
+                Check::Judge(question) => Some((c.id.as_str(), question.as_str())),
+                _ => None,
+            })
+            .collect();
+        let judged = match judge_model {
+            _ if questions.is_empty() => Judged::NotConfigured,
+            None => Judged::NotConfigured,
+            Some(model) => match judge(model, &questions, session_transcript).await {
+                Ok((verdicts, usage)) => {
+                    result.tokens.judge += usage;
+                    Judged::Answered(verdicts)
+                }
+                Err(e) => Judged::Failed(format!("judge failed: {e:#}")),
+            },
+        };
+        for criterion in criteria.iter() {
+            let mut scored = score(criterion, session_transcript, &judged);
+            scored.id = format!("{prefix}{}", scored.id);
+            chat(format!("· {} {:?}: {}", scored.id, scored.outcome, scored.detail));
+            if scored.outcome == Outcome::Error && scored.detail.contains("request budget exhausted") {
+                result.budget_exhausted = true;
             }
-            Err(e) => Judged::Failed(format!("judge failed: {e:#}")),
-        },
-    };
-    for criterion in &task.criteria {
-        let scored = score(criterion, &transcript, &judged);
-        chat(format!("· {} {:?}: {}", criterion.id, scored.outcome, scored.detail));
-        if scored.outcome == Outcome::Error && scored.detail.contains("request budget exhausted") {
-            result.budget_exhausted = true;
+            result.criteria.push(scored);
         }
-        result.criteria.push(scored);
     }
     result.transcript = transcript;
     Ok(result)
+}
+
+/// What the person says first and how they continue.
+#[derive(Clone, Copy)]
+struct Script<'a> {
+    prompt: &'a str,
+    replies: &'a [String],
+    persona: Option<&'a Persona>,
+}
+
+/// Scripted replies; `ACCEPT` accepts the latest proposal.
+fn scripted(replies: &[String]) -> ScriptedHuman {
+    let reply = |text: &String| {
+        if text.trim() == "ACCEPT" { Reply::AcceptLastProposal { by: "scripted-person".into(), then: None } } else { Reply::Say(text.clone()) }
+    };
+    ScriptedHuman::new(replies.iter().map(reply).chain([Reply::End]))
+}
+
+/// One conversation on `fixture` under `condition`: its outcome, transcript,
+/// and the tokens the person used.
+async fn converse(
+    fixture: &Fixture,
+    condition: Condition,
+    cast: Cast<'_>,
+    max_turns: Option<usize>,
+    script: Script<'_>,
+) -> Result<(Result<EpisodeStats>, Transcript, TokenUsage)> {
+    let mut human = match (script.persona, cast.person) {
+        (Some(persona), Some(model)) => Human::Simulated(Box::new(SimulatedHuman::new(persona.clone(), model.clone()))),
+        _ => Human::Scripted(scripted(script.replies)),
+    };
+    // The digest is generated per session, so a later session sees what was accepted.
+    let digest = if condition.digest {
+        let workspace = fixture.workspace()?;
+        let store = workspace.open_store()?;
+        Some(onto_workspace::digest::render(&workspace, &store, &onto_workspace::digest::DigestOptions::default())?)
+    } else {
+        None
+    };
+    let system = system_prompt(condition, digest.as_deref());
+    let (episode, transcript) = match cast.agent {
+        Agent::Api(config) => {
+            let mut session = Session::start(fixture).await?;
+            if condition.needs_ods() {
+                session.attach_ods(&ods_binary(), &fixture.root, &fixture.root.join("target")).await?;
+            }
+            session.restrict(condition.prefixes());
+            let mut config = config.clone();
+            if let Some(turns) = max_turns {
+                config.max_turns = turns;
+            }
+            let episode = tokio::time::timeout(run_timeout(), run_episode(&mut session, &config, &system, script.prompt, &mut human)).await;
+            (episode, session.close().await?)
+        }
+        Agent::ClaudeCode(config) => {
+            use crate::claude_code::{self, Server};
+            let mut servers = Vec::new();
+            if condition.needs_ontology() {
+                servers.push(Server::onto(config, fixture));
+            }
+            if condition.needs_ods() {
+                servers.push(Server::ods(&ods_binary(), fixture));
+            }
+            let mut transcript = Transcript::default();
+            let episode =
+                tokio::time::timeout(run_timeout(), claude_code::run_episode(fixture, &servers, config, &system, script.prompt, &mut human, &mut transcript))
+                    .await;
+            (episode, transcript)
+        }
+    };
+    let episode = episode.unwrap_or_else(|_| Err(anyhow::anyhow!("the conversation did not finish within {} minutes", run_timeout().as_secs() / 60)));
+    Ok((episode, transcript, human.usage()))
 }
 
 /// Tokens one run used, by role, as the models reported them.
@@ -667,6 +738,30 @@ pub fn report(results: &[RunResult]) -> String {
         out.push_str(&format!("| {task} | {criterion} | {} |\n", conditions.iter().map(|c| cell(row.get(c))).collect::<Vec<_>>().join(" | ")));
     }
     out.push_str(&format!("| **All** | | {} |\n", conditions.iter().map(|c| cell(totals.get(c))).collect::<Vec<_>>().join(" | ")));
+    // With repeated runs, how much each condition's overall pass rate varies.
+    let mut per_run: BTreeMap<Condition, BTreeMap<usize, (usize, usize)>> = BTreeMap::new();
+    for r in results.iter().filter(|r| r.skipped.is_none()) {
+        let cell = per_run.entry(r.condition).or_default().entry(r.run).or_default();
+        for c in r.criteria.iter().filter(|c| c.outcome != Outcome::Skipped) {
+            cell.1 += 1;
+            if c.outcome == Outcome::Pass {
+                cell.0 += 1;
+            }
+        }
+    }
+    if per_run.values().any(|runs| runs.len() > 1) {
+        out.push_str("\n## Spread across runs\n\nEach run's pass rate over all tasks. A gap between conditions smaller than this spread may be noise.\n\n| Condition | Runs | Mean | Min | Max |\n|---|---|---|---|---|\n");
+        for (condition, runs) in &per_run {
+            let rates: Vec<f64> = runs.values().filter(|(_, n)| *n > 0).map(|(p, n)| *p as f64 / *n as f64 * 100.0).collect();
+            if rates.is_empty() {
+                continue;
+            }
+            let mean = rates.iter().sum::<f64>() / rates.len() as f64;
+            let min = rates.iter().cloned().fold(f64::INFINITY, f64::min);
+            let max = rates.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
+            out.push_str(&format!("| {} | {} | {mean:.0}% | {min:.0}% | {max:.0}% |\n", condition.name(), rates.len()));
+        }
+    }
     let skipped: Vec<String> = results.iter().filter_map(|r| r.skipped.as_ref().map(|s| format!("{} / {}: {s}", r.task, r.condition.name()))).collect();
     out.push_str(
         "\n## Exploration (mean per run)\n\n| Condition | Tool calls | Entities looked up | Characters read | Empty searches |\n|---|---|---|---|---|\n",
