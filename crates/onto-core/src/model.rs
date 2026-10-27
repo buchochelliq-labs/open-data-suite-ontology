@@ -23,12 +23,18 @@ pub enum Object {
 #[derive(Clone, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ObjectRepr {
-    /// A literal value (string, number, boolean, list or map).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// A literal value (string, number, boolean, list, map or null).
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "present")]
     pub literal: Option<serde_json::Value>,
     /// The id of another entity.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub entity: Option<String>,
+}
+
+/// A key that is present is `Some`, even when its value is `null`; only a
+/// missing key (via `default`) is `None`.
+fn present<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<serde_json::Value>, D::Error> {
+    serde_json::Value::deserialize(deserializer).map(Some)
 }
 
 impl From<Object> for ObjectRepr {
@@ -219,6 +225,14 @@ mod tests {
         assert_eq!(back, Object::Literal(3.into()));
         assert!(serde_json::from_value::<Object>(serde_json::json!({"literal": 1, "entity": "x"})).is_err());
         assert!(serde_json::from_value::<Object>(serde_json::json!({})).is_err());
+    }
+
+    #[test]
+    fn null_literals_round_trip() {
+        let null = Object::Literal(serde_json::Value::Null);
+        let json = serde_json::to_string(&null).unwrap();
+        assert_eq!(json, r#"{"literal":null}"#);
+        assert_eq!(serde_json::from_str::<Object>(&json).unwrap(), null);
     }
 
     #[test]
