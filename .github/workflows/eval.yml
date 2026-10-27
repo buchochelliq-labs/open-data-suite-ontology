@@ -25,9 +25,6 @@ on:
       model:
         description: Agent model (empty = the preset's default)
         required: false
-      judge_model:
-        description: Judge model (empty = the agent model)
-        required: false
       base_url:
         description: For `custom` only. OpenAI-compatible base URL including /v1
         required: false
@@ -50,12 +47,9 @@ on:
       max_requests:
         description: Stop after this many model requests (empty = no cap; the run also stops when a daily quota is reached)
         required: false
-      local_model_repo:
-        description: For `local`. Hugging Face repository with a GGUF model
-        default: bartowski/Qwen2.5-7B-Instruct-GGUF
-      local_model_file:
-        description: For `local`. GGUF file in that repository
-        default: Qwen2.5-7B-Instruct-Q4_K_M.gguf
+      local_model:
+        description: For `local`. Hugging Face repository and GGUF file, as repo/file.gguf
+        default: bartowski/Qwen2.5-7B-Instruct-GGUF/Qwen2.5-7B-Instruct-Q4_K_M.gguf
 
 permissions:
   contents: read
@@ -84,15 +78,17 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/models
-          key: gguf-${{ inputs.local_model_repo }}-${{ inputs.local_model_file }}
+          key: gguf-${{ inputs.local_model }}
 
       - name: Start local model server
         if: inputs.provider == 'local'
         env:
           GH_TOKEN: ${{ github.token }}
-          MODEL_REPO: ${{ inputs.local_model_repo }}
-          MODEL_FILE: ${{ inputs.local_model_file }}
+          LOCAL_MODEL: ${{ inputs.local_model }}
         run: |
+          MODEL_REPO="${LOCAL_MODEL%/*}"
+          MODEL_FILE="${LOCAL_MODEL##*/}"
+          echo "LOCAL_MODEL_FILE=$MODEL_FILE" >> "$GITHUB_ENV"
           mkdir -p ~/models ~/llama
           if [ ! -f ~/models/"$MODEL_FILE" ]; then
             pip install --quiet "huggingface_hub[cli]"
@@ -108,9 +104,7 @@ jobs:
         env:
           PROVIDER: ${{ inputs.provider }}
           MODEL: ${{ inputs.model }}
-          JUDGE_MODEL: ${{ inputs.judge_model }}
           CUSTOM_BASE_URL: ${{ inputs.base_url }}
-          LOCAL_MODEL_FILE: ${{ inputs.local_model_file }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
@@ -137,7 +131,6 @@ jobs:
           fi
           export ONTO_LLM_BASE_URL="$BASE" ONTO_LLM_API_KEY="$KEY" ONTO_LLM_MODEL="${MODEL:-$DEFAULT}"
           if [ -z "$ONTO_LLM_MODEL" ]; then echo "::error::set the model input"; exit 1; fi
-          if [ -n "$JUDGE_MODEL" ]; then export ONTO_JUDGE_MODEL="$JUDGE_MODEL"; fi
           echo "provider=$PROVIDER model=$ONTO_LLM_MODEL runs=$RUNS requests_per_minute=${ONTO_LLM_RPM:-unlimited}"
           ARGS=(--runs "$RUNS" --conditions "$CONDITIONS")
           if [ -n "$TASK" ]; then ARGS+=(--task "$TASK"); fi
