@@ -58,6 +58,16 @@ enum Command {
         #[arg(long, default_value_t = 50)]
         max_edges: usize,
     },
+    /// Print a compact Markdown digest of the team's agreed context for agents,
+    /// or write it to a file (for example a skill reference or AGENTS.md).
+    Context {
+        /// Longest digest in characters (about four per token).
+        #[arg(long, default_value_t = 16_000)]
+        max_chars: usize,
+        /// Write here instead of standard output.
+        #[arg(long)]
+        out: Option<std::path::PathBuf>,
+    },
     /// Review proposals made by agents.
     Proposals {
         #[command(subcommand)]
@@ -187,6 +197,16 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             records.extend(proposals::pending_records(&store, &id)?);
             let view = workspace.resolver(Some(as_of.unwrap_or_else(now_rfc3339))).resolve_entity(&id, &records, &workspace.schema(&store)?);
             print_json(&view)?;
+        }
+        Command::Context { max_chars, out } => {
+            let digest = onto_workspace::digest::render(&workspace, &store, &onto_workspace::digest::DigestOptions { max_chars })?;
+            match out {
+                Some(path) => {
+                    std::fs::write(&path, &digest)?;
+                    println!("Wrote {} characters of context to {}", digest.len(), path.display());
+                }
+                None => print!("{digest}"),
+            }
         }
         Command::Neighbors { id, depth, max_edges } => print_json(&store.neighbors(&id, depth, max_edges)?)?,
         Command::Trust { source } => match workspace.trust(&source)? {

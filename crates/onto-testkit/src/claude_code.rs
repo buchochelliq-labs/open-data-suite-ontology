@@ -20,8 +20,9 @@ use anyhow::{Context, Result, bail};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
-use crate::agent::{EpisodeStats, Reply, ScriptedHuman, chat};
+use crate::agent::{EpisodeStats, Reply, chat, last_proposal};
 use crate::fixture::Fixture;
+use crate::human::Person;
 use crate::transcript::{Event, Transcript};
 
 #[derive(Clone, Debug)]
@@ -251,7 +252,7 @@ pub async fn run_episode(
     config: &ClaudeCodeConfig,
     system_prompt: &str,
     opening: &str,
-    human: &mut ScriptedHuman,
+    human: &mut impl Person,
     transcript: &mut Transcript,
 ) -> Result<EpisodeStats> {
     let scratch = tempfile::tempdir()?;
@@ -280,15 +281,10 @@ pub async fn run_episode(
             bail!("Claude Code: {error}");
         }
         let Some(session_id) = session.clone() else { bail!("Claude Code reported no session id") };
-        let reply = match human.reply() {
+        let reply = match human.reply(transcript).await? {
             Reply::Say(text) => text,
-            Reply::AcceptLastProposal { by } => {
-                let digest = transcript
-                    .tool_calls()
-                    .filter(|(tool, _, ok, _)| *tool == "ontology_propose" && *ok)
-                    .filter_map(|(.., result)| result["digest"].as_str().map(str::to_string))
-                    .last();
-                match digest {
+            Reply::AcceptLastProposal { by, then } => {
+                let accepted = match last_proposal(transcript) {
                     Some(digest) => {
                         let workspace = onto_workspace::Workspace::load(&fixture.root)?;
                         let mut store = workspace.open_store()?;
@@ -298,7 +294,8 @@ pub async fn run_episode(
                         format!("I accepted proposal {digest} with the onto CLI.")
                     }
                     None => "I don't see a proposal to accept.".to_string(),
-                }
+                };
+                then.map(|t| format!("{accepted} {t}")).unwrap_or(accepted)
             }
             Reply::End => {
                 chat("· the person ends the conversation".to_string());

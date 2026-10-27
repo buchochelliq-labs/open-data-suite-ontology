@@ -239,6 +239,13 @@ impl Store {
         self.query_records("SELECT claim_json, provenance_json FROM records WHERE predicate = ?1 ORDER BY id", &predicate)
     }
 
+    /// Every subject with at least one record, in order.
+    pub fn subjects(&self) -> Result<Vec<String>> {
+        let mut stmt = self.conn.prepare("SELECT DISTINCT subject FROM records ORDER BY subject")?;
+        let rows = stmt.query_map([], |row| row.get(0))?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
+    }
+
     pub fn entity_exists(&self, id: &str) -> Result<bool> {
         Ok(self.conn.query_row("SELECT EXISTS (SELECT 1 FROM records WHERE subject = ?1)", [id], |row| row.get(0))?)
     }

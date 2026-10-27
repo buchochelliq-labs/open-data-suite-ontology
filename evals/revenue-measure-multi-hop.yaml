@@ -1,0 +1,25 @@
+name: revenue-measure-multi-hop
+fixture: jaffle
+# The agreed measure sits two hops from the model the person names:
+# model.jaffle_ods.orders -> represents -> concept:order -> measured_by -> concept:net_sales.
+prompt: >-
+  Finance wants a monthly total per customer from the orders model. I was going to
+  sum orders.amount. Is that the right measure?
+replies:
+  - What exactly should I sum, and which orders count?
+persona:
+  role: analytics engineer building the finance team's monthly customer report
+  goal: know exactly what to sum and which orders to include, so the CFO's numbers match finance
+  knows:
+    - The report goes to the CFO every month.
+    - You have not heard of any agreed definition for this figure; that is why you are asking.
+criteria:
+  - id: uses_agreed_measure
+    answer_contains_any: ["net sales"]
+  - id: coupons_and_status
+    judge: >-
+      Does the assistant say the team's agreed measure subtracts coupon amounts and counts
+      only completed orders (excluding returned ones), presenting it as the team's agreed
+      definition from a source rather than as its own suggestion?
+  - id: grounded
+    called_any: [ontology_entity, ontology_neighbors, ontology_search, ods_describe_entity]

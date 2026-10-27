@@ -1,13 +1,19 @@
 # Evaluation tasks
 
 Each file is one data-modelling question on a fixture, answered by a model
-under three conditions that differ in the tools it sees:
+under conditions that differ in the tools it sees and the context it is given:
 
 | Condition | Tools |
 |---|---|
 | `ods_only` | OpenDataSuite (`ods mcp`): the baseline for a dbt project |
 | `ontology_only` | The ontology (`onto mcp`) |
 | `both` | Both, as intended |
+
+Add `+digest` to any of them (`both+digest`, `ods_only+digest`) to put the
+context digest from `onto context` in the system prompt: the team's agreed
+facts, always in front of the agent, without it having to think to ask.
+Comparing `both` with `both+digest` and `ods_only+digest` shows what tools add
+over a digest and the other way round.
 
 Where the ontology's tools are visible, the agent also gets the
 `ontology-grounding` skill in its system prompt, as an agent host would load
@@ -30,7 +36,12 @@ name: orders-fact-grain
 fixture: jaffle                 # a directory under fixtures/
 prompt: The person's opening message.
 replies: [What they say each time the agent stops to talk.]
-conditions: [ontology_only]     # optional; default all three
+persona:                        # for runs where a model plays the person
+  role: analytics engineer asked by finance for an orders fact table
+  goal: the right grain and key, matching what the team agreed
+  knows: [Facts they can share when asked.]
+  accepts_proposals: false      # whether they accept a proposal they agree with
+conditions: [ontology_only]     # optional tool sets; default all three
 criteria:
   - { id: grain, answer_contains_any: ["one row per order"] }
   - { id: no_invention, answer_not_contains: ["fct_refunds"] }
@@ -40,6 +51,34 @@ criteria:
 ```
 
 Prefer deterministic checks; use `judge` for what text matching cannot see.
+
+### Tasks that need exploration
+
+Besides looking up a named model, some tasks only pass if the agent explores:
+
+| Task | What it needs |
+|---|---|
+| `revenue-measure-multi-hop` | Two hops: `orders` → `represents` → `concept:order` → `measured_by` → `concept:net_sales` |
+| `revenue-definition-paraphrase` | The person says "revenue"; the agreed concept is "Net sales", and the word "revenue" appears nowhere |
+| `order-history-unnamed` | The person says "order history"; the model is `order_events` |
+| `naming-standard` | A central standard the question doesn't mention, which the project's own model names don't follow |
+
+The report adds an exploration table per condition (tool calls, entities
+looked up, characters of tool output read) and lists every search that found
+nothing, so vocabulary misses are visible. They decide whether semantic search
+(#12) moves up.
+
+### Who plays the person
+
+By default the person follows the task's `replies`. With `--human simulated`
+(workflow input `human`), a second model plays the person from the task's
+`persona`: it sees the conversation as a person would (messages, not tool
+calls), shares what it knows when asked, ends the conversation when it has
+what it needs (`DONE`), and accepts a proposal when its persona allows and it
+agrees (`ACCEPT`). One model plays the agent, another the person. The person's
+model is `ONTO_HUMAN_BASE_URL` / `ONTO_HUMAN_MODEL` / `ONTO_HUMAN_API_KEY`
+(`ONTO_HUMAN_MODEL` for Claude Code), defaulting to the agent's. A simulated
+person costs one request per reply.
 Every run is also checked against the safety invariants (no repository
 change without a person accepting, proposals need a rationale).
 
@@ -54,7 +93,7 @@ workflow from the Actions tab and pick a provider preset:
 | `gemini` | Free tier | Repository secret `GEMINI_API_KEY` from Google AI Studio, no card | Most free headroom; free-tier inputs may be used by Google for training (the fixtures are synthetic). Model `gemini-flash-latest` |
 | `groq` | Free tier | Secret `GROQ_API_KEY` | Low tokens per minute and per day; may not finish a full pass |
 | `openrouter` | Free models | Secret `OPENROUTER_API_KEY` | About 50 requests a day on `:free` models |
-| `local` | Free, no account | None | llama.cpp on the runner (default Qwen2.5 7B). Slow on CPU, and a weaker agent and judge |
+| `local` | Free, no account | None | llama.cpp on the runner. `model` is a Hugging Face `repo/file.gguf` (default Qwen2.5 7B). Slow on CPU, and a weaker agent and judge |
 | `custom` | Your provider | Input `base_url`, secret `ONTO_LLM_API_KEY` | Any OpenAI-compatible endpoint |
 
 Keys are secrets of the repository's `ai` environment (**Settings →
@@ -118,6 +157,6 @@ Writes `target/eval/report.md` (pass counts per task, criterion and
 condition), `results.json`, and one transcript per run that can be replayed as
 a regression test.
 
-Four tasks are a starting point, not a benchmark. Add tasks from real
+Eight tasks are a starting point, not a benchmark. Add tasks from real
 modelling questions as they come up; small differences between conditions
 mean little until there are more tasks and runs.

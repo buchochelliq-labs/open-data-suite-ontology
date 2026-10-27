@@ -1,0 +1,22 @@
+name: revenue-definition-paraphrase
+fixture: jaffle
+# "Revenue" appears nowhere in the project or its context: the agreed concept
+# is "Net sales". Finding it needs other words or exploration.
+prompt: How does the team define revenue? I need it for a dashboard tile.
+replies:
+  - Can you give me the exact rule so I can build it?
+persona:
+  role: analyst adding a revenue tile to the company dashboard
+  goal: the team's agreed definition of the figure, precise enough to build
+  knows:
+    - People in meetings call it revenue; you don't know if there is an official name.
+criteria:
+  - id: finds_agreed_concept
+    answer_contains_any: ["net sales"]
+  - id: agreed_rule
+    judge: >-
+      Does the assistant give the team's agreed definition (order amount minus coupon
+      amount, completed orders only, returned orders excluded) and say where it comes from,
+      rather than inventing a definition or saying none exists?
+  - id: searched
+    called_any: [ontology_search, ontology_entity, ods_search, ods_find_data]

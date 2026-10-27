@@ -26,13 +26,18 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::agent::{ModelConfig, Reply, ScriptedHuman, chat, complete, is_budget_exhausted, run_episode};
-
-/// Longest one conversation may take before it is recorded as an error.
-const RUN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15 * 60);
 use crate::fixture::{Fixture, ods_available, ods_binary};
+use crate::human::{Human, Persona, SimulatedHuman};
 use crate::invariants;
 use crate::session::Session;
 use crate::transcript::{Event, Transcript};
+
+/// Longest one conversation may take before it is recorded as an error:
+/// `ONTO_RUN_TIMEOUT_MINS`, default 15. A CPU model needs longer.
+fn run_timeout() -> std::time::Duration {
+    let minutes = std::env::var("ONTO_RUN_TIMEOUT_MINS").ok().and_then(|v| v.trim().parse().ok()).unwrap_or(15);
+    std::time::Duration::from_secs(minutes * 60)
+}
 
 /// Who plays the agent.
 #[derive(Clone, Debug)]
@@ -69,44 +74,102 @@ is unknown, say so and ask the user; never guess it. Unknown lineage is uncertai
 
 /// The system prompt for `condition`: the shared prompt, plus the grounding
 /// skill (without its front matter) when the ontology's tools are visible, or
-/// the equivalent ODS guidance when they are not.
-pub fn system_prompt(condition: Condition) -> String {
-    if condition == Condition::OdsOnly {
-        return format!("{SYSTEM_PROMPT}\n\nFollow this guidance.\n\n{ODS_GUIDANCE}");
+/// the equivalent ODS guidance when they are not; then the context digest
+/// when the condition includes it.
+pub fn system_prompt(condition: Condition, digest: Option<&str>) -> String {
+    let mut prompt = if condition.tools == Tools::Ods {
+        format!("{SYSTEM_PROMPT}\n\nFollow this guidance.\n\n{ODS_GUIDANCE}")
+    } else {
+        let body = GROUNDING_SKILL.splitn(3, "---\n").nth(2).unwrap_or(GROUNDING_SKILL).trim();
+        format!("{SYSTEM_PROMPT}\n\nFollow this skill.\n\n{body}")
+    };
+    if let (true, Some(digest)) = (condition.digest, digest) {
+        prompt.push_str(&format!(
+            "\n\nThe team's agreed context, generated from the ontology with `onto context`. \
+             Use it, and cite its sources, before answering.\n\n{digest}"
+        ));
     }
-    let body = GROUNDING_SKILL.splitn(3, "---\n").nth(2).unwrap_or(GROUNDING_SKILL).trim();
-    format!("{SYSTEM_PROMPT}\n\nFollow this skill.\n\n{body}")
+    prompt
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Condition {
-    OdsOnly,
-    OntologyOnly,
+/// Which MCP tools the agent sees.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Tools {
+    Ods,
+    Ontology,
     Both,
 }
 
+/// What the agent is given: a tool set, and optionally the context digest in
+/// its system prompt. Written as the tool set's name with `+digest` appended,
+/// e.g. `ods_only`, `both`, `both+digest`, `ods_only+digest`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
+pub struct Condition {
+    pub tools: Tools,
+    pub digest: bool,
+}
+
 impl Condition {
-    pub const ALL: [Condition; 3] = [Condition::OdsOnly, Condition::OntologyOnly, Condition::Both];
+    pub const ODS_ONLY: Condition = Condition { tools: Tools::Ods, digest: false };
+    pub const ONTOLOGY_ONLY: Condition = Condition { tools: Tools::Ontology, digest: false };
+    pub const BOTH: Condition = Condition { tools: Tools::Both, digest: false };
 
     fn prefixes(self) -> &'static [&'static str] {
-        match self {
-            Condition::OdsOnly => &["ods_"],
-            Condition::OntologyOnly => &["ontology_"],
-            Condition::Both => &["ods_", "ontology_"],
+        match self.tools {
+            Tools::Ods => &["ods_"],
+            Tools::Ontology => &["ontology_"],
+            Tools::Both => &["ods_", "ontology_"],
         }
     }
 
     fn needs_ods(self) -> bool {
-        self != Condition::OntologyOnly
+        self.tools != Tools::Ontology
     }
 
-    pub fn name(self) -> &'static str {
-        match self {
-            Condition::OdsOnly => "ods_only",
-            Condition::OntologyOnly => "ontology_only",
-            Condition::Both => "both",
-        }
+    fn needs_ontology(self) -> bool {
+        self.tools != Tools::Ods
+    }
+
+    pub fn name(self) -> String {
+        let tools = match self.tools {
+            Tools::Ods => "ods_only",
+            Tools::Ontology => "ontology_only",
+            Tools::Both => "both",
+        };
+        if self.digest { format!("{tools}+digest") } else { tools.to_string() }
+    }
+}
+
+impl std::str::FromStr for Condition {
+    type Err = String;
+
+    fn from_str(name: &str) -> Result<Self, String> {
+        let (tools, digest) = match name.strip_suffix("+digest") {
+            Some(tools) => (tools, true),
+            None => (name, false),
+        };
+        let tools = match tools {
+            "ods_only" => Tools::Ods,
+            "ontology_only" => Tools::Ontology,
+            "both" => Tools::Both,
+            other => return Err(format!("unknown condition `{other}`: expected ods_only, ontology_only or both, optionally with +digest")),
+        };
+        Ok(Condition { tools, digest })
+    }
+}
+
+impl TryFrom<String> for Condition {
+    type Error = String;
+
+    fn try_from(name: String) -> Result<Self, String> {
+        name.parse()
+    }
+}
+
+impl From<Condition> for String {
+    fn from(condition: Condition) -> String {
+        condition.name()
     }
 }
 
@@ -120,11 +183,15 @@ pub struct Task {
     /// The person's replies, in order, whenever the agent stops to talk.
     #[serde(default)]
     pub replies: Vec<String>,
-    /// Conditions that make sense for this task (default: all).
+    /// Tool sets that make sense for this task (default: all).
     #[serde(default)]
     pub conditions: Option<Vec<Condition>>,
     #[serde(default)]
     pub max_turns: Option<usize>,
+    /// Who the person is, for runs where a model plays them. Without a
+    /// persona, or when no person model is configured, `replies` are used.
+    #[serde(default)]
+    pub persona: Option<Persona>,
     pub criteria: Vec<Criterion>,
 }
 
@@ -187,6 +254,8 @@ pub struct RunResult {
     pub criteria: Vec<CriterionResult>,
     pub tool_calls: usize,
     pub failed_tool_calls: usize,
+    /// How the agent explored, from its tool calls.
+    pub exploration: Exploration,
     pub violations: Vec<String>,
     pub warnings: Vec<String>,
     #[serde(skip)]
@@ -202,8 +271,10 @@ impl Task {
         paths.iter().map(|p| serde_norway::from_str(&std::fs::read_to_string(p)?).with_context(|| format!("parsing {}", p.display()))).collect()
     }
 
+    /// Whether the task makes sense with `condition`'s tools. A task's
+    /// `conditions` limit tool sets; any of them may add the digest.
     pub fn applies_to(&self, condition: Condition) -> bool {
-        self.conditions.as_ref().is_none_or(|c| c.contains(&condition))
+        self.conditions.as_ref().is_none_or(|c| c.iter().any(|c| c.tools == condition.tools))
     }
 }
 
@@ -269,15 +340,22 @@ pub fn render_chat(title: &str, result: &RunResult) -> String {
 const JUDGE_SYSTEM: &str =
     "You grade a conversation between a user and an AI data-modelling assistant. Answer only with JSON: {\"pass\": true|false, \"reason\": \"one sentence\"}.";
 
-async fn judge(http: &reqwest::Client, judge: &Judge, question: &str, transcript: &Transcript) -> Result<(bool, String)> {
-    let prompt = format!("Question: {question}\n\nConversation:\n{}", render(transcript));
-    let text = match judge {
+/// One question to a model without tools; returns its text answer. Used by
+/// the judge and by the simulated person.
+pub async fn ask(model: &Agent, system: &str, prompt: &str) -> Result<String> {
+    Ok(match model {
         Agent::Api(config) => {
-            let messages = [json!({ "role": "system", "content": JUDGE_SYSTEM }), json!({ "role": "user", "content": prompt })];
-            complete(http, config, &messages, &[]).await?["content"].as_str().unwrap_or_default().to_string()
+            let http = reqwest::Client::builder().timeout(config.timeout).connect_timeout(std::time::Duration::from_secs(30)).build()?;
+            let messages = [json!({ "role": "system", "content": system }), json!({ "role": "user", "content": prompt })];
+            complete(&http, config, &messages, &[]).await?["content"].as_str().unwrap_or_default().to_string()
         }
-        Agent::ClaudeCode(config) => crate::claude_code::ask(config, JUDGE_SYSTEM, &prompt).await?,
-    };
+        Agent::ClaudeCode(config) => crate::claude_code::ask(config, system, prompt).await?,
+    })
+}
+
+async fn judge(judge: &Judge, question: &str, transcript: &Transcript) -> Result<(bool, String)> {
+    let prompt = format!("Question: {question}\n\nConversation:\n{}", render(transcript));
+    let text = ask(judge, JUDGE_SYSTEM, &prompt).await?;
     let text = text.as_str();
     let start = text.find('{').context("judge reply has no JSON")?;
     let end = text.rfind('}').context("judge reply has no JSON")?;
@@ -285,7 +363,7 @@ async fn judge(http: &reqwest::Client, judge: &Judge, question: &str, transcript
     Ok((verdict["pass"].as_bool().unwrap_or(false), verdict["reason"].as_str().unwrap_or_default().to_string()))
 }
 
-async fn score(criterion: &Criterion, transcript: &Transcript, judge_model: Option<&Judge>, http: &reqwest::Client) -> CriterionResult {
+async fn score(criterion: &Criterion, transcript: &Transcript, judge_model: Option<&Judge>) -> CriterionResult {
     let text = answer(transcript);
     let (outcome, detail) = match &criterion.check {
         Check::AnswerContainsAny(needles) => match needles.iter().find(|n| text.contains(&n.to_lowercase())) {
@@ -310,7 +388,7 @@ async fn score(criterion: &Criterion, transcript: &Transcript, judge_model: Opti
         }
         Check::Judge(question) => match judge_model {
             None => (Outcome::Skipped, "no judge model configured".into()),
-            Some(config) => match judge(http, config, question, transcript).await {
+            Some(config) => match judge(config, question, transcript).await {
                 Ok((true, reason)) => (Outcome::Pass, reason),
                 Ok((false, reason)) => (Outcome::Fail, reason),
                 Err(e) => (Outcome::Error, format!("judge failed: {e:#}")),
@@ -333,6 +411,7 @@ impl RunResult {
             criteria: Vec::new(),
             tool_calls: 0,
             failed_tool_calls: 0,
+            exploration: Exploration::default(),
             violations: Vec::new(),
             warnings: Vec::new(),
             transcript: Transcript::default(),
@@ -340,8 +419,26 @@ impl RunResult {
     }
 }
 
+/// Who takes part in a run besides the person's opening message.
+#[derive(Clone, Copy)]
+pub struct Cast<'a> {
+    /// Plays the assistant.
+    pub agent: &'a Agent,
+    /// Answers judged criteria; `None` skips them.
+    pub judge: Option<&'a Judge>,
+    /// Plays the person for tasks with a persona; `None` uses scripted replies.
+    pub person: Option<&'a Agent>,
+}
+
+impl<'a> Cast<'a> {
+    pub fn new(agent: &'a Agent) -> Self {
+        Self { agent, judge: None, person: None }
+    }
+}
+
 /// Run one task once under one condition.
-pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Agent, judge_model: Option<&Judge>) -> Result<RunResult> {
+pub async fn run_task(task: &Task, condition: Condition, run: usize, cast: Cast<'_>) -> Result<RunResult> {
+    let (agent, judge_model) = (cast.agent, cast.judge);
     let mut result = RunResult::not_run(task, condition, run, "");
     result.skipped = None;
     if condition.needs_ods() && !ods_available() {
@@ -350,8 +447,18 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Age
     }
     let fixture = Fixture::new(&task.fixture)?;
     let before = fixture.repository_files()?;
-    let mut human = ScriptedHuman::new(task.replies.iter().cloned().map(Reply::Say).chain([Reply::End]));
-    let system = system_prompt(condition);
+    let mut human = match (&task.persona, cast.person) {
+        (Some(persona), Some(model)) => Human::Simulated(Box::new(SimulatedHuman::new(persona.clone(), model.clone()))),
+        _ => Human::Scripted(ScriptedHuman::new(task.replies.iter().cloned().map(Reply::Say).chain([Reply::End]))),
+    };
+    let digest = if condition.digest {
+        let workspace = fixture.workspace()?;
+        let store = workspace.open_store()?;
+        Some(onto_workspace::digest::render(&workspace, &store, &onto_workspace::digest::DigestOptions::default())?)
+    } else {
+        None
+    };
+    let system = system_prompt(condition, digest.as_deref());
     let (episode, transcript) = match agent {
         Agent::Api(config) => {
             let mut session = Session::start(&fixture).await?;
@@ -363,13 +470,13 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Age
             if let Some(turns) = task.max_turns {
                 config.max_turns = turns;
             }
-            let episode = tokio::time::timeout(RUN_TIMEOUT, run_episode(&mut session, &config, &system, &task.prompt, &mut human)).await;
+            let episode = tokio::time::timeout(run_timeout(), run_episode(&mut session, &config, &system, &task.prompt, &mut human)).await;
             (episode, session.close().await?)
         }
         Agent::ClaudeCode(config) => {
             use crate::claude_code::{self, Server};
             let mut servers = Vec::new();
-            if condition != Condition::OdsOnly {
+            if condition.needs_ontology() {
                 servers.push(Server::onto(config, &fixture));
             }
             if condition.needs_ods() {
@@ -377,12 +484,12 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Age
             }
             let mut transcript = Transcript::default();
             let episode =
-                tokio::time::timeout(RUN_TIMEOUT, claude_code::run_episode(&fixture, &servers, config, &system, &task.prompt, &mut human, &mut transcript))
+                tokio::time::timeout(run_timeout(), claude_code::run_episode(&fixture, &servers, config, &system, &task.prompt, &mut human, &mut transcript))
                     .await;
             (episode, transcript)
         }
     };
-    let episode = episode.unwrap_or_else(|_| Err(anyhow::anyhow!("the conversation did not finish within {} minutes", RUN_TIMEOUT.as_secs() / 60)));
+    let episode = episode.unwrap_or_else(|_| Err(anyhow::anyhow!("the conversation did not finish within {} minutes", run_timeout().as_secs() / 60)));
     match episode {
         Ok(stats) => {
             result.tool_calls = stats.tool_calls;
@@ -395,12 +502,12 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Age
         }
     }
 
+    result.exploration = Exploration::of(&transcript);
     let report = invariants::check(&transcript, &before, &fixture.repository_files()?);
     result.violations = report.violations;
     result.warnings.extend(report.warnings);
-    let http = reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build()?;
     for criterion in &task.criteria {
-        let scored = score(criterion, &transcript, judge_model, &http).await;
+        let scored = score(criterion, &transcript, judge_model).await;
         chat(format!("· {} {:?}: {}", criterion.id, scored.outcome, scored.detail));
         if scored.outcome == Outcome::Error && scored.detail.contains("request budget exhausted") {
             result.budget_exhausted = true;
@@ -409,6 +516,50 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Age
     }
     result.transcript = transcript;
     Ok(result)
+}
+
+/// How an agent explored in one run, measured from its tool calls.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct Exploration {
+    /// Distinct entities and models the agent looked up by id or name.
+    pub entities: usize,
+    /// Characters of tool output the agent received.
+    pub chars_read: usize,
+    /// Searches that found nothing, as `tool: query`; vocabulary misses show here.
+    pub empty_searches: Vec<String>,
+}
+
+const SEARCH_TOOLS: [&str; 3] = ["ontology_search", "ods_search", "ods_find_data"];
+
+impl Exploration {
+    pub fn of(transcript: &Transcript) -> Self {
+        let mut entities = std::collections::BTreeSet::new();
+        let mut out = Exploration::default();
+        for (tool, arguments, ok, result) in transcript.tool_calls() {
+            out.chars_read += match result {
+                Value::String(s) => s.len(),
+                other => other.to_string().len(),
+            };
+            for key in ["id", "entity", "from", "to"] {
+                if let Some(id) = arguments[key].as_str() {
+                    entities.insert(id.to_string());
+                }
+            }
+            for key in ["ids", "entities"] {
+                for id in arguments[key].as_array().into_iter().flatten().filter_map(Value::as_str) {
+                    entities.insert(id.to_string());
+                }
+            }
+            if ok && SEARCH_TOOLS.contains(&tool) {
+                let found = ["hits", "results", "matches", "entities"].iter().find_map(|k| result[*k].as_array());
+                if found.is_some_and(|hits| hits.is_empty()) {
+                    out.empty_searches.push(format!("{tool}: {}", arguments["query"].as_str().unwrap_or(&arguments.to_string())));
+                }
+            }
+        }
+        out.entities = entities.len();
+        out
+    }
 }
 
 /// Pass rates per task, criterion and condition, as a Markdown report.
@@ -450,6 +601,29 @@ pub fn report(results: &[RunResult]) -> String {
     }
     out.push_str(&format!("| **All** | | {} |\n", conditions.iter().map(|c| cell(totals.get(c))).collect::<Vec<_>>().join(" | ")));
     let skipped: Vec<String> = results.iter().filter_map(|r| r.skipped.as_ref().map(|s| format!("{} / {}: {s}", r.task, r.condition.name()))).collect();
+    out.push_str(
+        "\n## Exploration (mean per run)\n\n| Condition | Tool calls | Entities looked up | Characters read | Empty searches |\n|---|---|---|---|---|\n",
+    );
+    for condition in &conditions {
+        let runs: Vec<&RunResult> = results.iter().filter(|r| r.skipped.is_none() && r.error.is_none() && r.condition == *condition).collect();
+        if runs.is_empty() {
+            continue;
+        }
+        let mean = |f: &dyn Fn(&RunResult) -> usize| runs.iter().map(|r| f(r)).sum::<usize>() as f64 / runs.len() as f64;
+        out.push_str(&format!(
+            "| {} | {:.1} | {:.1} | {:.0} | {:.1} |\n",
+            condition.name(),
+            mean(&|r| r.tool_calls),
+            mean(&|r| r.exploration.entities),
+            mean(&|r| r.exploration.chars_read),
+            mean(&|r| r.exploration.empty_searches.len())
+        ));
+    }
+    let empty: Vec<String> =
+        results.iter().flat_map(|r| r.exploration.empty_searches.iter().map(move |q| format!("{} / {}: {q}", r.task, r.condition.name()))).collect();
+    if !empty.is_empty() {
+        out.push_str(&format!("\nSearches that found nothing:\n- {}\n", empty.join("\n- ")));
+    }
     out.push_str(&format!("\nInvariant violations: {violations}\n"));
     let errors = errors(results);
     if !errors.is_empty() {

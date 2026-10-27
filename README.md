@@ -34,7 +34,16 @@ Connect an agent (VS Code / Copilot, Claude Code, any MCP host):
 
 Agents can read (`ontology_status`, `ontology_search`, `ontology_entity`,
 `ontology_neighbors`) and propose (`ontology_propose`). They cannot sync,
-accept or write files. A person reviews proposals:
+accept or write files. Agents only learn from tools they think to call, so also give
+them a digest of the team's agreed facts to read up front:
+
+```sh
+onto context --out skills/ontology-grounding/references/context.md   # or AGENTS.md
+```
+
+The digest is generated per person from their synced store (like the store,
+don't commit it unless your team chooses to), stays within a size budget
+(`--max-chars`), and cites each fact's source and authority. A person reviews proposals:
 
 ```sh
 onto proposals list

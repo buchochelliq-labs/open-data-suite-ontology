@@ -3,6 +3,7 @@
 
 pub mod command;
 pub mod config;
+pub mod digest;
 pub mod git;
 pub mod local;
 pub mod lock;

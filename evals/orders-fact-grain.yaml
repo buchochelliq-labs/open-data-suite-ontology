@@ -5,6 +5,12 @@ prompt: >-
   What grain and primary key should it have, and how should we define "customer" for it?
 replies:
   - Use whatever the team has already agreed, and give me your recommendation.
+persona:
+  role: analytics engineer asked by finance for an orders fact table
+  goal: the right grain, key and customer definition, matching what the team has agreed
+  knows:
+    - Finance wants customer attributes on every order row.
+    - You want whatever the team has already agreed rather than something new.
 criteria:
   - id: grain_per_order
     answer_contains_any: ["one row per order"]

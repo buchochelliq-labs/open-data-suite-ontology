@@ -11,6 +11,7 @@ name: Evaluate (does the ontology help?)
 #   groq        Groq free tier. Secret GROQ_API_KEY. Low tokens/minute.
 #   openrouter  OpenRouter `:free` models. Secret OPENROUTER_API_KEY. ~50 requests/day.
 #   local       llama.cpp on the runner. No key, nothing to retire; slow and weaker.
+#               `model` is a Hugging Face repo/file.gguf (default Qwen2.5 7B).
 #   custom      Any endpoint: `base_url` input and secret ONTO_LLM_API_KEY.
 #
 # Secrets are read from the repository's `ai` environment (Settings →
@@ -25,7 +26,7 @@ on:
         options: [claude-code, gemini, groq, openrouter, local, custom]
         default: claude-code
       model:
-        description: Agent model (empty = the preset's default; for claude-code e.g. sonnet or opus)
+        description: Agent model (empty = the preset's default). claude-code e.g. sonnet; local a Hugging Face repo/file.gguf
         required: false
       base_url:
         description: For `custom` only. OpenAI-compatible base URL including /v1
@@ -40,7 +41,7 @@ on:
         description: Only tasks whose name contains this (empty = all). One task fits a small daily quota
         required: false
       conditions:
-        description: Conditions to compare, comma-separated
+        description: Conditions to compare, comma-separated; add +digest to give the context digest (e.g. both+digest)
         default: ods_only,ontology_only,both
       judge:
         description: Score judged criteria with the model (costs extra requests)
@@ -49,9 +50,11 @@ on:
       max_requests:
         description: Stop after this many model requests (empty = no cap; the run also stops when a daily quota is reached)
         required: false
-      local_model:
-        description: For `local`. Hugging Face repository and GGUF file, as repo/file.gguf
-        default: bartowski/Qwen2.5-7B-Instruct-GGUF/Qwen2.5-7B-Instruct-Q4_K_M.gguf
+      human:
+        description: Who plays the person. simulated = a model given each task's persona (costs extra requests)
+        type: choice
+        options: [scripted, simulated]
+        default: scripted
 
 permissions:
   contents: read
@@ -88,13 +91,13 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/models
-          key: gguf-${{ inputs.local_model }}
+          key: gguf-${{ inputs.model || 'bartowski/Qwen2.5-7B-Instruct-GGUF/Qwen2.5-7B-Instruct-Q4_K_M.gguf' }}
 
       - name: Start local model server
         if: inputs.provider == 'local'
         env:
           GH_TOKEN: ${{ github.token }}
-          LOCAL_MODEL: ${{ inputs.local_model }}
+          LOCAL_MODEL: ${{ inputs.model || 'bartowski/Qwen2.5-7B-Instruct-GGUF/Qwen2.5-7B-Instruct-Q4_K_M.gguf' }}
         run: |
           MODEL_REPO="${LOCAL_MODEL%/*}"
           MODEL_FILE="${LOCAL_MODEL##*/}"
@@ -126,8 +129,9 @@ jobs:
           CONDITIONS: ${{ inputs.conditions }}
           JUDGE: ${{ inputs.judge }}
           MAX_REQUESTS: ${{ inputs.max_requests }}
+          HUMAN: ${{ inputs.human }}
         run: |
-          ARGS=(--runs "$RUNS" --conditions "$CONDITIONS")
+          ARGS=(--runs "$RUNS" --conditions "$CONDITIONS" --human "$HUMAN")
           if [ -n "$TASK" ]; then ARGS+=(--task "$TASK"); fi
           if [ "$JUDGE" != "true" ]; then ARGS+=(--no-judge); fi
           mkdir -p target/eval
@@ -145,14 +149,15 @@ jobs:
             gemini)     BASE="https://generativelanguage.googleapis.com/v1beta/openai"; KEY="$GEMINI_API_KEY";     DEFAULT="gemini-flash-latest";      PACE=5 ;;
             groq)       BASE="https://api.groq.com/openai/v1";                          KEY="$GROQ_API_KEY";       DEFAULT="openai/gpt-oss-120b";      PACE=30 ;;
             openrouter) BASE="https://openrouter.ai/api/v1";                            KEY="$OPENROUTER_API_KEY"; DEFAULT="openai/gpt-oss-120b:free"; PACE=20 ;;
-            local)      BASE="http://127.0.0.1:8080/v1";                                KEY="";                    DEFAULT="$LOCAL_MODEL_FILE";        PACE="" ;;
+            local)      BASE="http://127.0.0.1:8080/v1";                                KEY="";                    DEFAULT="$LOCAL_MODEL_FILE";        PACE=""; MODEL="" ;;
             custom)     BASE="$CUSTOM_BASE_URL";                                        KEY="$CUSTOM_API_KEY";     DEFAULT="";                         PACE="" ;;
           esac
           # Pace requests below the provider's per-minute limit instead of hitting it.
           export ONTO_LLM_RPM="${RPM:-$PACE}"
           # Hosted providers answer within seconds; an overloaded one can hang, so
           # give up on a request after 2 minutes (and retry). A CPU model needs longer.
-          if [ "$PROVIDER" = "local" ]; then export ONTO_LLM_TIMEOUT_SECS=900; else export ONTO_LLM_TIMEOUT_SECS=120; fi
+          # A conversation on a CPU model can take far longer than the default 15 minutes.
+          if [ "$PROVIDER" = "local" ]; then export ONTO_LLM_TIMEOUT_SECS=900 ONTO_RUN_TIMEOUT_MINS=90; else export ONTO_LLM_TIMEOUT_SECS=120; fi
           if [ -z "$BASE" ]; then echo "::error::base_url is required for the custom provider"; exit 1; fi
           if [ "$PROVIDER" != "local" ] && [ -z "$KEY" ]; then
             echo "::error::no API key: add the repository secret for the $PROVIDER provider (see the comment at the top of eval.yml)"; exit 1

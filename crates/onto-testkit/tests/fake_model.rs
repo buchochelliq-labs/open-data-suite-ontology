@@ -36,8 +36,11 @@ async fn model_loop_drives_tools_and_respects_the_human() {
         requests_per_minute: None,
         budget: None,
     };
-    let mut human =
-        ScriptedHuman::new([Reply::Say("Propose grain one row per person.".into()), Reply::AcceptLastProposal { by: "reviewer".into() }, Reply::End]);
+    let mut human = ScriptedHuman::new([
+        Reply::Say("Propose grain one row per person.".into()),
+        Reply::AcceptLastProposal { by: "reviewer".into(), then: None },
+        Reply::End,
+    ]);
 
     let stats = run_episode(&mut session, &config, "system", "What is a customer?", &mut human).await.unwrap();
     let transcript = session.close().await.unwrap();

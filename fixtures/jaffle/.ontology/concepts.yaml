@@ -1,0 +1,17 @@
+# What the team agreed about measures. The words in these facts are chosen so
+# that evaluation tasks phrased differently ("revenue") need exploration, not
+# a lucky keyword: nothing here contains the word "revenue".
+entities:
+  - id: concept:net_sales
+    type: BusinessConcept
+    label: Net sales
+    definition: >-
+      Order amount minus coupon amount, counting only orders whose status is
+      completed. Returned orders are excluded. This is the figure finance reports
+      each month.
+    rationale: Agreed with finance in the 2026 planning review.
+
+  # Reached from the orders model through `represents`: a multi-hop fact.
+  - id: concept:order
+    relations:
+      - { predicate: measured_by, target: concept:net_sales }

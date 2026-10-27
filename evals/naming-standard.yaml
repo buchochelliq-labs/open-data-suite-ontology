@@ -1,0 +1,24 @@
+name: naming-standard
+fixture: jaffle
+# The central pack's naming standard (<layer>_<source>__<entity>) differs from
+# the existing staging models (stg_orders, stg_payments), so copying the
+# project's pattern gives the wrong name.
+prompt: >-
+  I'm adding a staging model for payment events that come from our Stripe source.
+  What should I call it?
+replies:
+  - Thanks. Anything else about the name I should know?
+persona:
+  role: analytics engineer adding a new staging model
+  goal: a model name that follows the team's conventions
+  knows:
+    - The source is declared as `stripe` in the project's sources file.
+    - It is a staging model over the raw payment events table.
+criteria:
+  - id: follows_standard
+    answer_contains_any: ["stg_stripe__payment"]
+  - id: cites_standard
+    judge: >-
+      Does the assistant name the model using the team's naming standard
+      (<layer>_<source>__<entity>, with a double underscore before the entity) and say the
+      standard is where the convention comes from, rather than only copying existing model names?
