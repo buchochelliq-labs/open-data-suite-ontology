@@ -29,6 +29,18 @@ use crate::invariants;
 use crate::session::Session;
 use crate::transcript::{Event, Transcript};
 
+/// Who plays the agent.
+#[derive(Clone, Debug)]
+pub enum Agent {
+    /// Our model loop against an OpenAI-compatible endpoint.
+    Api(ModelConfig),
+    /// The Claude Code CLI in headless mode, as a real MCP host.
+    ClaudeCode(crate::claude_code::ClaudeCodeConfig),
+}
+
+/// Who answers judged criteria.
+pub type Judge = Agent;
+
 pub const SYSTEM_PROMPT: &str = "You are a data-modelling assistant for an analytics project. \
 Use the available tools to ground every claim before answering, and say which tool or source a fact came from. \
 Ask the user when information is missing or sources disagree. Never invent models, columns or keys. Be concise.";
@@ -184,20 +196,26 @@ pub fn render(transcript: &Transcript) -> String {
         .join("\n")
 }
 
-async fn judge(http: &reqwest::Client, config: &ModelConfig, question: &str, transcript: &Transcript) -> Result<(bool, String)> {
-    let messages = [
-        json!({ "role": "system", "content": "You grade a conversation between a user and an AI data-modelling assistant. Answer only with JSON: {\"pass\": true|false, \"reason\": \"one sentence\"}." }),
-        json!({ "role": "user", "content": format!("Question: {question}\n\nConversation:\n{}", render(transcript)) }),
-    ];
-    let message = complete(http, config, &messages, &[]).await?;
-    let text = message["content"].as_str().unwrap_or_default();
+const JUDGE_SYSTEM: &str =
+    "You grade a conversation between a user and an AI data-modelling assistant. Answer only with JSON: {\"pass\": true|false, \"reason\": \"one sentence\"}.";
+
+async fn judge(http: &reqwest::Client, judge: &Judge, question: &str, transcript: &Transcript) -> Result<(bool, String)> {
+    let prompt = format!("Question: {question}\n\nConversation:\n{}", render(transcript));
+    let text = match judge {
+        Agent::Api(config) => {
+            let messages = [json!({ "role": "system", "content": JUDGE_SYSTEM }), json!({ "role": "user", "content": prompt })];
+            complete(http, config, &messages, &[]).await?["content"].as_str().unwrap_or_default().to_string()
+        }
+        Agent::ClaudeCode(config) => crate::claude_code::ask(config, JUDGE_SYSTEM, &prompt).await?,
+    };
+    let text = text.as_str();
     let start = text.find('{').context("judge reply has no JSON")?;
     let end = text.rfind('}').context("judge reply has no JSON")?;
     let verdict: Value = serde_json::from_str(&text[start..=end]).context("judge reply is not JSON")?;
     Ok((verdict["pass"].as_bool().unwrap_or(false), verdict["reason"].as_str().unwrap_or_default().to_string()))
 }
 
-async fn score(criterion: &Criterion, transcript: &Transcript, judge_model: Option<&ModelConfig>, http: &reqwest::Client) -> CriterionResult {
+async fn score(criterion: &Criterion, transcript: &Transcript, judge_model: Option<&Judge>, http: &reqwest::Client) -> CriterionResult {
     let text = answer(transcript);
     let (outcome, detail) = match &criterion.check {
         Check::AnswerContainsAny(needles) => match needles.iter().find(|n| text.contains(&n.to_lowercase())) {
@@ -253,7 +271,7 @@ impl RunResult {
 }
 
 /// Run one task once under one condition.
-pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &ModelConfig, judge_model: Option<&ModelConfig>) -> Result<RunResult> {
+pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Agent, judge_model: Option<&Judge>) -> Result<RunResult> {
     let mut result = RunResult::not_run(task, condition, run, "");
     result.skipped = None;
     if condition.needs_ods() && !ods_available() {
@@ -262,22 +280,40 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Mod
     }
     let fixture = Fixture::new(&task.fixture)?;
     let before = fixture.repository_files()?;
-    let mut session = Session::start(&fixture).await?;
-    if condition.needs_ods() {
-        session.attach_ods(&ods_binary(), &fixture.root, &fixture.root.join("target")).await?;
-    }
-    session.restrict(condition.prefixes());
-
     let mut human = ScriptedHuman::new(task.replies.iter().cloned().map(Reply::Say).chain([Reply::End]));
-    let mut config = agent.clone();
-    if let Some(turns) = task.max_turns {
-        config.max_turns = turns;
-    }
-    let episode = match tokio::time::timeout(RUN_TIMEOUT, run_episode(&mut session, &config, SYSTEM_PROMPT, &task.prompt, &mut human)).await {
-        Ok(outcome) => outcome,
-        Err(_) => Err(anyhow::anyhow!("the conversation did not finish within {} minutes", RUN_TIMEOUT.as_secs() / 60)),
+    let (episode, transcript) = match agent {
+        Agent::Api(config) => {
+            let mut session = Session::start(&fixture).await?;
+            if condition.needs_ods() {
+                session.attach_ods(&ods_binary(), &fixture.root, &fixture.root.join("target")).await?;
+            }
+            session.restrict(condition.prefixes());
+            let mut config = config.clone();
+            if let Some(turns) = task.max_turns {
+                config.max_turns = turns;
+            }
+            let episode = tokio::time::timeout(RUN_TIMEOUT, run_episode(&mut session, &config, SYSTEM_PROMPT, &task.prompt, &mut human)).await;
+            (episode, session.close().await?)
+        }
+        Agent::ClaudeCode(config) => {
+            use crate::claude_code::{self, Server};
+            let mut servers = Vec::new();
+            if condition != Condition::OdsOnly {
+                servers.push(Server::onto(config, &fixture));
+            }
+            if condition.needs_ods() {
+                servers.push(Server::ods(&ods_binary(), &fixture));
+            }
+            let mut transcript = Transcript::default();
+            let episode = tokio::time::timeout(
+                RUN_TIMEOUT,
+                claude_code::run_episode(&fixture, &servers, config, SYSTEM_PROMPT, &task.prompt, &mut human, &mut transcript),
+            )
+            .await;
+            (episode, transcript)
+        }
     };
-    let transcript = session.close().await?;
+    let episode = episode.unwrap_or_else(|_| Err(anyhow::anyhow!("the conversation did not finish within {} minutes", RUN_TIMEOUT.as_secs() / 60)));
     match episode {
         Ok(stats) => {
             result.tool_calls = stats.tool_calls;
@@ -293,7 +329,7 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Mod
     let report = invariants::check(&transcript, &before, &fixture.repository_files()?);
     result.violations = report.violations;
     result.warnings.extend(report.warnings);
-    let http = reqwest::Client::builder().timeout(agent.timeout).build()?;
+    let http = reqwest::Client::builder().timeout(std::time::Duration::from_secs(120)).build()?;
     for criterion in &task.criteria {
         let scored = score(criterion, &transcript, judge_model, &http).await;
         chat(format!("· {} {:?}: {}", criterion.id, scored.outcome, scored.detail));

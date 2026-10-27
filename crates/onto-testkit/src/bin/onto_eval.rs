@@ -12,7 +12,8 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use onto_testkit::agent::{ModelConfig, RequestBudget};
-use onto_testkit::eval::{Condition, RunResult, Task, errors, render, report, run_task};
+use onto_testkit::claude_code::ClaudeCodeConfig;
+use onto_testkit::eval::{Agent, Condition, RunResult, Task, errors, render, report, run_task};
 use onto_testkit::fixture::repo_root;
 
 #[derive(Parser)]
@@ -54,11 +55,22 @@ fn judge_config(agent: &ModelConfig) -> ModelConfig {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    let Some(mut agent) = ModelConfig::from_env() else { bail!("set ONTO_LLM_BASE_URL (and ONTO_LLM_MODEL, ONTO_LLM_API_KEY)") };
-    if let Some(max) = args.max_requests {
-        agent.budget = Some(RequestBudget::new(max));
-    }
-    let judge = (!args.no_judge).then(|| judge_config(&agent));
+    let mut budget = None;
+    let (agent, judge) = if std::env::var("ONTO_AGENT").is_ok_and(|a| a == "claude-code") {
+        let config = ClaudeCodeConfig::from_env();
+        eprintln!("agent: Claude Code ({}), onto at {}", config.model.as_deref().unwrap_or("default model"), config.onto_bin.display());
+        (Agent::ClaudeCode(config.clone()), (!args.no_judge).then_some(Agent::ClaudeCode(config)))
+    } else {
+        let Some(mut config) = ModelConfig::from_env() else {
+            bail!("set ONTO_LLM_BASE_URL (and ONTO_LLM_MODEL, ONTO_LLM_API_KEY), or ONTO_AGENT=claude-code")
+        };
+        if let Some(max) = args.max_requests {
+            config.budget = Some(RequestBudget::new(max));
+        }
+        budget = config.budget.clone();
+        let judge = (!args.no_judge).then(|| Agent::Api(judge_config(&config)));
+        (Agent::Api(config), judge)
+    };
     let conditions: Vec<Condition> = args
         .conditions
         .iter()
@@ -95,7 +107,7 @@ async fn main() -> Result<()> {
         }
         results.push(result);
     }
-    if let Some(budget) = &agent.budget {
+    if let Some(budget) = &budget {
         eprintln!("model requests used: {}", budget.used());
     }
     let markdown = report(&results);

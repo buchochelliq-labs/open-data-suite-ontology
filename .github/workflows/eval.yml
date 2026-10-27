@@ -5,6 +5,8 @@ name: Evaluate (does the ontology help?)
 # cover free options (provider rate limits and model lists change, so check
 # the provider's current documentation):
 #
+#   claude-code Claude Code itself is the agent, on your Claude subscription.
+#               Secret CLAUDE_CODE_OAUTH_TOKEN (run `claude setup-token`).
 #   gemini      Google AI Studio free tier. Secret GEMINI_API_KEY (free, no card).
 #   groq        Groq free tier. Secret GROQ_API_KEY. Low tokens/minute.
 #   openrouter  OpenRouter `:free` models. Secret OPENROUTER_API_KEY. ~50 requests/day.
@@ -20,10 +22,10 @@ on:
       provider:
         description: Model provider
         type: choice
-        options: [gemini, groq, openrouter, local, custom]
-        default: gemini
+        options: [claude-code, gemini, groq, openrouter, local, custom]
+        default: claude-code
       model:
-        description: Agent model (empty = the preset's default)
+        description: Agent model (empty = the preset's default; for claude-code e.g. sonnet or opus)
         required: false
       base_url:
         description: For `custom` only. OpenAI-compatible base URL including /v1
@@ -73,6 +75,14 @@ jobs:
           python-version: "3.12"
       - run: pip install opendatasuite==0.0.2
 
+      - name: Install Claude Code and build onto
+        if: inputs.provider == 'claude-code'
+        run: |
+          npm install -g @anthropic-ai/claude-code
+          claude --version
+          cargo build -p onto-cli
+          echo "ONTO_BIN=$PWD/target/debug/onto" >> "$GITHUB_ENV"
+
       - name: Cache local model
         if: inputs.provider == 'local'
         uses: actions/cache@v4
@@ -109,6 +119,7 @@ jobs:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CUSTOM_API_KEY: ${{ secrets.ONTO_LLM_API_KEY }}
+          CLAUDE_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           RUNS: ${{ inputs.runs }}
           RPM: ${{ inputs.rpm }}
           TASK: ${{ inputs.task }}
@@ -116,6 +127,20 @@ jobs:
           JUDGE: ${{ inputs.judge }}
           MAX_REQUESTS: ${{ inputs.max_requests }}
         run: |
+          ARGS=(--runs "$RUNS" --conditions "$CONDITIONS")
+          if [ -n "$TASK" ]; then ARGS+=(--task "$TASK"); fi
+          if [ "$JUDGE" != "true" ]; then ARGS+=(--no-judge); fi
+          mkdir -p target/eval
+          set -o pipefail
+          if [ "$PROVIDER" = "claude-code" ]; then
+            if [ -z "$CLAUDE_TOKEN" ]; then echo "::error::no CLAUDE_CODE_OAUTH_TOKEN secret: run \`claude setup-token\` and add it to the ai environment"; exit 1; fi
+            # The subscription token must be used, so no API key may be set.
+            unset ANTHROPIC_API_KEY
+            export CLAUDE_CODE_OAUTH_TOKEN="$CLAUDE_TOKEN" ONTO_AGENT=claude-code ONTO_CLAUDE_MODEL="$MODEL"
+            echo "provider=claude-code model=${MODEL:-default} runs=$RUNS"
+            cargo run -p onto-testkit --features llm --bin onto-eval -- "${ARGS[@]}" 2>&1 | tee target/eval/live.log
+            exit 0
+          fi
           case "$PROVIDER" in
             gemini)     BASE="https://generativelanguage.googleapis.com/v1beta/openai"; KEY="$GEMINI_API_KEY";     DEFAULT="gemini-flash-latest";      PACE=5 ;;
             groq)       BASE="https://api.groq.com/openai/v1";                          KEY="$GROQ_API_KEY";       DEFAULT="openai/gpt-oss-120b";      PACE=30 ;;
@@ -135,14 +160,9 @@ jobs:
           export ONTO_LLM_BASE_URL="$BASE" ONTO_LLM_API_KEY="$KEY" ONTO_LLM_MODEL="${MODEL:-$DEFAULT}"
           if [ -z "$ONTO_LLM_MODEL" ]; then echo "::error::set the model input"; exit 1; fi
           echo "provider=$PROVIDER model=$ONTO_LLM_MODEL runs=$RUNS requests_per_minute=${ONTO_LLM_RPM:-unlimited} request_timeout=${ONTO_LLM_TIMEOUT_SECS}s"
-          ARGS=(--runs "$RUNS" --conditions "$CONDITIONS")
-          if [ -n "$TASK" ]; then ARGS+=(--task "$TASK"); fi
-          if [ "$JUDGE" != "true" ]; then ARGS+=(--no-judge); fi
           if [ -n "$MAX_REQUESTS" ]; then ARGS+=(--max-requests "$MAX_REQUESTS"); fi
           # The live conversation log goes to the job output and, for cancelled
           # runs too, to target/eval/live.log in the uploaded artifact.
-          mkdir -p target/eval
-          set -o pipefail
           cargo run -p onto-testkit --features llm --bin onto-eval -- "${ARGS[@]}" 2>&1 | tee target/eval/live.log
 
       - name: Summary

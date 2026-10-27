@@ -119,7 +119,8 @@ impl ScriptedHuman {
         Self { replies: replies.into_iter().collect() }
     }
 
-    fn next(&mut self) -> Reply {
+    /// The next scripted reply, or `End` when the script is exhausted.
+    pub fn reply(&mut self) -> Reply {
         self.replies.pop_front().unwrap_or(Reply::End)
     }
 }
@@ -346,7 +347,7 @@ pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_pro
 
         chat(format!("ASSISTANT: {}", if text.is_empty() { "(empty reply)" } else { &text }));
         session.agent_says(&text);
-        let reply = match human.next() {
+        let reply = match human.reply() {
             Reply::Say(text) => text,
             Reply::AcceptLastProposal { by } => {
                 let digest = session

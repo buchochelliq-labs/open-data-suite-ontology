@@ -9,6 +9,8 @@
 #[cfg(feature = "llm")]
 pub mod agent;
 #[cfg(feature = "llm")]
+pub mod claude_code;
+#[cfg(feature = "llm")]
 pub mod eval;
 #[cfg(feature = "llm")]
 pub mod fake_model;

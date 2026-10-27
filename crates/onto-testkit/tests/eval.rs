@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use onto_testkit::agent::ModelConfig;
 use onto_testkit::eval::errors;
-use onto_testkit::eval::{Condition, Outcome, Task, report, run_task};
+use onto_testkit::eval::{Agent, Condition, Outcome, Task, report, run_task};
 use onto_testkit::fake_model::{error, say, serve, tool_call};
 use onto_testkit::fixture::repo_root;
 use serde_json::json;
@@ -53,7 +53,7 @@ async fn a_task_runs_scores_and_reports() {
     .await;
     let (judge_url, _) = serve(vec![say(r#"Sure: {"pass": true, "reason": "It says the proposal is pending review."}"#)]).await;
 
-    let result = run_task(task, Condition::OntologyOnly, 1, &config(agent_url), Some(&config(judge_url))).await.unwrap();
+    let result = run_task(task, Condition::OntologyOnly, 1, &Agent::Api(config(agent_url)), Some(&Agent::Api(config(judge_url)))).await.unwrap();
     let outcome = |id: &str| result.criteria.iter().find(|c| c.id == id).unwrap().outcome;
     assert_eq!(outcome("surfaces_conflict"), Outcome::Pass);
     assert_eq!(outcome("proposes_grain"), Outcome::Pass);
@@ -76,7 +76,7 @@ async fn judge_criteria_are_skipped_without_a_judge() {
     let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
     let task = tasks.iter().find(|t| t.name == "customer-grain-proposal").unwrap();
     let (agent_url, _) = serve(vec![say("I don't know.")]).await;
-    let result = run_task(task, Condition::OntologyOnly, 1, &config(agent_url), None).await.unwrap();
+    let result = run_task(task, Condition::OntologyOnly, 1, &Agent::Api(config(agent_url)), None).await.unwrap();
     let judged = result.criteria.iter().find(|c| c.id == "honest_about_review").unwrap();
     assert_eq!(judged.outcome, Outcome::Skipped);
     assert_eq!(result.criteria.iter().find(|c| c.id == "grounded").unwrap().outcome, Outcome::Fail);
@@ -90,7 +90,7 @@ async fn a_failing_provider_is_an_error_not_a_score() {
     // The agent's provider rejects the request (e.g. retired or misconfigured).
     let (agent_url, _) = serve(vec![error(404, None)]).await;
     let (judge_url, _) = serve(vec![error(404, None)]).await;
-    let result = run_task(task, Condition::OntologyOnly, 1, &config(agent_url), Some(&config(judge_url))).await.unwrap();
+    let result = run_task(task, Condition::OntologyOnly, 1, &Agent::Api(config(agent_url)), Some(&Agent::Api(config(judge_url)))).await.unwrap();
     assert!(result.error.as_deref().unwrap().contains("404"), "{:?}", result.error);
     assert_eq!(result.criteria.iter().find(|c| c.id == "honest_about_review").unwrap().outcome, Outcome::Error);
 
@@ -105,7 +105,7 @@ async fn an_exhausted_quota_marks_the_run_so_the_runner_stops() {
     let task = tasks.iter().find(|t| t.name == "customer-grain-proposal").unwrap();
     let quota = json!({ "error": { "code": 429, "details": [{ "quotaId": "GenerateRequestsPerDayPerProjectPerModel-FreeTier" }] } });
     let (agent_url, _) = serve(vec![onto_testkit::fake_model::error_with_body(429, quota)]).await;
-    let result = run_task(task, Condition::OntologyOnly, 1, &config(agent_url), None).await.unwrap();
+    let result = run_task(task, Condition::OntologyOnly, 1, &Agent::Api(config(agent_url)), None).await.unwrap();
     assert!(result.budget_exhausted);
     assert!(result.error.as_deref().unwrap().contains("daily quota"));
 }
