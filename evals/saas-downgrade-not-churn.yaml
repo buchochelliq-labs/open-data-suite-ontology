@@ -17,9 +17,11 @@ persona:
 criteria:
   - id: names_known_issue
     answer_contains_any: ["DATA-412", "known issue"]
+  # The agent cannot know Globex changed plans unless the person says so; a
+  # rerun failed an answer that explained the rule but did not ask.
   - id: contraction_not_churn
     judge: >-
-      Does the assistant explain that a plan change recorded as one subscription ending and
-      another starting is not churn under the team's MRR movement definition, and that
-      Globex's April should be reported as contraction (a downgrade), citing the team's
-      definition or the model's recorded known issue?
+      Does the assistant explain that, under the team's MRR movement definition, a plan change
+      recorded as one subscription ending and another starting is not churn, and that if
+      Globex changed plans its April should be reported as contraction (or expansion), not as
+      churn followed by reactivation, citing the team's definition or the model's known issue?

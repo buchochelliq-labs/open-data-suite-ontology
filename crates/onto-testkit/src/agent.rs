@@ -187,13 +187,24 @@ impl std::ops::AddAssign for TokenUsage {
     }
 }
 
-/// The digest of the most recent successful `ontology_propose`.
-pub(crate) fn last_proposal(transcript: &Transcript) -> Option<String> {
+/// The digest of the most recent successful `ontology_propose`, unless the
+/// person already accepted it. A simulated person may say ACCEPT twice; the
+/// second time there is nothing to accept (never an older proposal).
+pub fn last_proposal(transcript: &Transcript) -> Option<String> {
+    let accepted: Vec<&str> = transcript
+        .events
+        .iter()
+        .filter_map(|event| match event {
+            Event::HumanAction { action, detail } if action == "accept" => detail["digest"].as_str(),
+            _ => None,
+        })
+        .collect();
     transcript
         .tool_calls()
         .filter(|(tool, _, ok, _)| *tool == "ontology_propose" && *ok)
         .filter_map(|(.., result)| result["digest"].as_str().map(str::to_string))
         .last()
+        .filter(|digest| !accepted.contains(&digest.as_str()))
 }
 
 fn truncate(text: String, max: usize) -> String {

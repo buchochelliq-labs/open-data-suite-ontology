@@ -5,7 +5,7 @@
 
 use std::time::Duration;
 
-use onto_testkit::agent::{ModelConfig, Reply};
+use onto_testkit::agent::{ModelConfig, Reply, last_proposal};
 use onto_testkit::eval::{Agent, Cast, Condition, Task, run_task};
 use onto_testkit::fake_model::{say, serve, tool_call};
 use onto_testkit::fixture::repo_root;
@@ -24,6 +24,18 @@ fn config(base_url: String) -> ModelConfig {
         requests_per_minute: None,
         budget: None,
     }
+}
+
+#[test]
+fn a_proposal_is_accepted_once() {
+    let propose = |digest: &str| Event::ToolCall { tool: "ontology_propose".into(), arguments: json!({}), ok: true, result: json!({ "digest": digest }) };
+    let accept = |digest: &str| Event::HumanAction { action: "accept".into(), detail: json!({ "digest": digest, "by": "p" }) };
+    let mut transcript = Transcript { events: vec![propose("a"), propose("b")] };
+    assert_eq!(last_proposal(&transcript).as_deref(), Some("b"));
+    // A simulated person said ACCEPT twice in a pilot run. The second must
+    // neither accept "b" again (which aborted the run) nor fall back to "a".
+    transcript.events.push(accept("b"));
+    assert_eq!(last_proposal(&transcript), None);
 }
 
 #[test]
