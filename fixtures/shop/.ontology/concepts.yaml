@@ -1,0 +1,24 @@
+# Repository facts for the shop project. They extend and, where priority says so,
+# override the central pack.
+entities:
+  - id: concept:customer
+    # Disagrees with the central definition: shows a priority-resolved conflict.
+    definition: An account holder with at least one completed order.
+    rationale: Finance only counts customers after a first completed order.
+
+  - id: concept:return
+    type: BusinessConcept
+    label: Return
+    definition: Goods sent back by a customer against an order line.
+    relations:
+      - { predicate: owned_by, target: team:fulfilment }
+      - { predicate: relates_to, target: concept:order_line, qualifiers: { cardinality: many_to_one } }
+
+  # Grain differs from the concept it represents: something an agent should notice.
+  - id: model.shop.fct_orders
+    type: DataAsset
+    label: fct_orders
+    properties:
+      grain: one row per order line
+    relations:
+      - { predicate: represents, target: concept:order }

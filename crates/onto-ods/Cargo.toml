@@ -1,0 +1,13 @@
+[package]
+name = "onto-ods"
+description = "OpenDataSuite as an ontology source: dbt assets, columns, keys and relationships with ODS's evidence"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+onto-core.workspace = true
+ods-erd.workspace = true
+serde.workspace = true
+serde_json.workspace = true

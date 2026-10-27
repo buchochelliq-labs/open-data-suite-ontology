@@ -1,0 +1,4 @@
+name = "core"
+version = "0.1.0"
+description = "Shared data-modelling vocabulary and example business concepts."
+authority = "declared"

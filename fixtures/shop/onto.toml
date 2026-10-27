@@ -1,0 +1,19 @@
+# Fixture workspace used by tests. `central` is rewritten by the testkit to a
+# local git repository built from packs/core.
+
+[resolution]
+mode = "priority"
+priority = ["repo", "central"]
+
+[[source]]
+id = "central"
+layer = "central"
+kind = "git"
+url = "REPLACED_BY_TESTKIT"
+path = "packs/core"
+
+[[source]]
+id = "repo"
+layer = "repository"
+kind = "pack"
+path = ".ontology"

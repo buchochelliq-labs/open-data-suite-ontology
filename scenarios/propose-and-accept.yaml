@@ -1,0 +1,50 @@
+name: agent proposes, person accepts, context updates
+fixture: shop
+steps:
+  - human: "The customer dimension is one row per person, even if they have several accounts."
+
+  # A proposal needs a rationale.
+  - call: ontology_propose
+    args:
+      subject: "concept:customer"
+      predicate: grain
+      object: { literal: one row per person }
+      rationale: ""
+    ok: false
+
+  - call: ontology_propose
+    args:
+      subject: "concept:customer"
+      predicate: grain
+      object: { literal: one row per person }
+      rationale: "User stated in design session: one row per person across accounts."
+    save_as: proposal
+    expect:
+      - { path: /status, equals: pending }
+      - { path: /target_file, equals: .ontology/accepted.yaml }
+      - { path: /patch, contains: "one row per person" }
+      - { path: /next_step, contains: "onto proposals accept" }
+
+  # Pending proposals are visible but are not facts.
+  - call: ontology_entity
+    args: { id: "concept:customer" }
+    expect:
+      - { path: /entity, contains: "pending" }
+  - call: ontology_status
+    expect:
+      - { path: /pending_proposals, equals: 1 }
+
+  - agent: "I've prepared a proposal; it is pending until you accept it with `onto proposals accept`."
+  - accept: proposal
+    by: data-team-lead
+
+  - call: ontology_entity
+    args: { id: "concept:customer" }
+    expect:
+      - { path: /entity, contains: "one row per person" }
+      - { path: /entity, contains: "data-team-lead" }
+      - { path: /entity, contains: "reviewed" }
+      - { path: /entity, not_contains: "pending" }
+  - call: ontology_status
+    expect:
+      - { path: /pending_proposals, equals: 0 }

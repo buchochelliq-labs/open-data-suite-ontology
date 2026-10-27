@@ -1,0 +1,14 @@
+[package]
+name = "onto-core"
+description = "Claim, provenance and resolution model for the ontology layer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true

@@ -1,0 +1,19 @@
+name: order-events-fan-out
+fixture: jaffle
+prompt: >-
+  Can I join order_events to orders on order_id and then sum order amounts per customer?
+replies:
+  - I just need correct totals per customer. What should I do?
+criteria:
+  - id: warns_about_fan_out
+    answer_contains_any: ["fan", "duplicat", "multiple rows", "more than one row", "overcount", "over-count", "double count", "inflate"]
+  # ODS alone reports the grain as unknown; the team agreed it in the ontology.
+  - id: knows_event_grain
+    answer_contains_any: ["status change"]
+  - id: safe_approach
+    judge: >-
+      Does the assistant explain that order_events can have several rows per order, so
+      summing amounts after the join would overcount, and recommend aggregating or
+      deduplicating before joining (or not joining order_events at all)?
+  - id: grounded
+    called_any: [ontology_entity, ontology_search, ods_describe_entity, ods_find_data, ods_erd, ods_plan_query]

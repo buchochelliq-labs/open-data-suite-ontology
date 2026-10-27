@@ -1,0 +1,821 @@
+{
+  "schema_version": {
+    "major": 1,
+    "minor": 0
+  },
+  "command": "erd.generate",
+  "ods_version": "0.0.2",
+  "result": {
+    "target_dir": "artifacts/dbt-1.10",
+    "format": "json",
+    "entities": 13,
+    "relationships": 4,
+    "declared": 1,
+    "tested": 2,
+    "joined": 1,
+    "inferred": 0,
+    "rendered": "{\n  \"schema_version\": 1,\n  \"entities\": [\n    {\n      \"id\": \"model.jaffle_ods.customer_order_rank\",\n      \"name\": \"customer_order_rank\",\n      \"kind\": \"table\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"customer_order_rank\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"order_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": true,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"customer_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": true,\n          \"foreign_key\": false,\n          \"not_null\": true\n        },\n        {\n          \"name\": \"amount\",\n          \"data_type\": \"DOUBLE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"order_seq\",\n          \"data_type\": \"BIGINT\",\n          \"description\": null,\n          \"primary_key\": true,\n          \"foreign_key\": false,\n          \"not_null\": true\n        },\n        {\n          \"name\": \"running_amount\",\n          \"data_type\": \"DOUBLE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": {\n        \"columns\": [\n          \"customer_id\",\n          \"order_seq\"\n        ],\n        \"basis\": \"declared\",\n        \"evidence\": [\n          \"constraint primary_key on customer_order_rank\"\n        ]\n      },\n      \"unique_keys\": [\n        {\n          \"columns\": [\n            \"order_id\"\n          ],\n          \"basis\": \"tested\",\n          \"evidence\": [\n            \"test.jaffle_ods.unique_customer_order_rank_order_id.3ddaa5af35\"\n          ]\n        }\n      ]\n    },\n    {\n      \"id\": \"model.jaffle_ods.customer_segments\",\n      \"name\": \"customer_segments\",\n      \"kind\": \"table\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"customer_segments\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"customer_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"segment\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": null,\n      \"unique_keys\": []\n    },\n    {\n      \"id\": \"model.jaffle_ods.customers\",\n      \"name\": \"customers\",\n      \"kind\": \"table\",\n      \"description\": \"One row per customer with order statistics.\",\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"customers\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"customer_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": \"Primary key.\",\n          \"primary_key\": true,\n          \"foreign_key\": false,\n          \"not_null\": true\n        },\n        {\n          \"name\": \"first_name\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"last_name\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"full_name\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"first_order\",\n          \"data_type\": \"DATE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"most_recent_order\",\n          \"data_type\": \"DATE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"number_of_orders\",\n          \"data_type\": \"BIGINT\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"lifetime_value\",\n          \"data_type\": \"DOUBLE\",\n          \"description\": \"Sum of non-returned order amounts, in dollars.\",\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"value_tier\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": {\n        \"columns\": [\n          \"customer_id\"\n        ],\n        \"basis\": \"tested\",\n        \"evidence\": [\n          \"test.jaffle_ods.not_null_customers_customer_id.5c9bf9911d\",\n          \"test.jaffle_ods.unique_customers_customer_id.c5af1ff4b1\"\n        ]\n      },\n      \"unique_keys\": []\n    },\n    {\n      \"id\": \"model.jaffle_ods.customers_snapshot_view\",\n      \"name\": \"customers_snapshot_view\",\n      \"kind\": \"view\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"customers_snapshot_view\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"customer_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"first_name\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"last_name\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"full_name\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"first_order\",\n          \"data_type\": \"DATE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"most_recent_order\",\n          \"data_type\": \"DATE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"number_of_orders\",\n          \"data_type\": \"BIGINT\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"lifetime_value\",\n          \"data_type\": \"DOUBLE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"value_tier\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": null,\n      \"unique_keys\": []\n    },\n    {\n      \"id\": \"model.jaffle_ods.order_events\",\n      \"name\": \"order_events\",\n      \"kind\": \"table\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"order_events\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"order_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"event_date\",\n          \"data_type\": \"DATE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"event_type\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": null,\n      \"unique_keys\": []\n    },\n    {\n      \"id\": \"model.jaffle_ods.orders\",\n      \"name\": \"orders\",\n      \"kind\": \"table\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"orders\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"order_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": true,\n          \"foreign_key\": false,\n          \"not_null\": true\n        },\n        {\n          \"name\": \"customer_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": true,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"order_date\",\n          \"data_type\": \"DATE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"status\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"credit_card_amount\",\n          \"data_type\": \"DOUBLE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"coupon_amount\",\n          \"data_type\": \"DOUBLE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"bank_transfer_amount\",\n          \"data_type\": \"DOUBLE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"gift_card_amount\",\n          \"data_type\": \"DOUBLE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"amount\",\n          \"data_type\": \"DOUBLE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": {\n        \"columns\": [\n          \"order_id\"\n        ],\n        \"basis\": \"declared\",\n        \"evidence\": [\n          \"constraint primary_key on orders\"\n        ]\n      },\n      \"unique_keys\": [\n        {\n          \"columns\": [\n            \"order_id\"\n          ],\n          \"basis\": \"tested\",\n          \"evidence\": [\n            \"test.jaffle_ods.unique_orders_order_id.fed79b3a6e\"\n          ]\n        }\n      ]\n    },\n    {\n      \"id\": \"model.jaffle_ods.segment_summary\",\n      \"name\": \"segment_summary\",\n      \"kind\": \"table\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"segment_summary\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"segment\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"customers\",\n          \"data_type\": \"BIGINT\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": null,\n      \"unique_keys\": []\n    },\n    {\n      \"id\": \"model.jaffle_ods.stg_customers\",\n      \"name\": \"stg_customers\",\n      \"kind\": \"view\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"stg_customers\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"customer_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"first_name\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"last_name\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"email\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"signup_date\",\n          \"data_type\": \"DATE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": null,\n      \"unique_keys\": []\n    },\n    {\n      \"id\": \"model.jaffle_ods.stg_orders\",\n      \"name\": \"stg_orders\",\n      \"kind\": \"view\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"stg_orders\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"order_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": true,\n          \"foreign_key\": false,\n          \"not_null\": true\n        },\n        {\n          \"name\": \"customer_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"order_date\",\n          \"data_type\": \"DATE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"status\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": {\n        \"columns\": [\n          \"order_id\"\n        ],\n        \"basis\": \"tested\",\n        \"evidence\": [\n          \"test.jaffle_ods.not_null_stg_orders_order_id.81cfe2fe64\",\n          \"test.jaffle_ods.unique_stg_orders_order_id.e3b841c71a\"\n        ]\n      },\n      \"unique_keys\": []\n    },\n    {\n      \"id\": \"model.jaffle_ods.stg_payments\",\n      \"name\": \"stg_payments\",\n      \"kind\": \"view\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"stg_payments\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"payment_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": true,\n          \"foreign_key\": false,\n          \"not_null\": true\n        },\n        {\n          \"name\": \"order_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": true,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"payment_method\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"amount\",\n          \"data_type\": \"DOUBLE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": {\n        \"columns\": [\n          \"payment_id\"\n        ],\n        \"basis\": \"tested\",\n        \"evidence\": [\n          \"test.jaffle_ods.not_null_stg_payments_payment_id.c19cc50075\",\n          \"test.jaffle_ods.unique_stg_payments_payment_id.3744510712\"\n        ]\n      },\n      \"unique_keys\": []\n    },\n    {\n      \"id\": \"seed.jaffle_ods.raw_customers\",\n      \"name\": \"raw_customers\",\n      \"kind\": \"seed\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"raw_customers\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"first_name\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"last_name\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"email\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"signup_date\",\n          \"data_type\": \"DATE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": null,\n      \"unique_keys\": []\n    },\n    {\n      \"id\": \"seed.jaffle_ods.raw_orders\",\n      \"name\": \"raw_orders\",\n      \"kind\": \"seed\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"raw_orders\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"user_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"order_date\",\n          \"data_type\": \"DATE\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"status\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": null,\n      \"unique_keys\": []\n    },\n    {\n      \"id\": \"seed.jaffle_ods.raw_payments\",\n      \"name\": \"raw_payments\",\n      \"kind\": \"seed\",\n      \"description\": null,\n      \"relation\": \"\\\"jaffle_ods\\\".\\\"main\\\".\\\"raw_payments\\\"\",\n      \"columns\": [\n        {\n          \"name\": \"id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"order_id\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"payment_method\",\n          \"data_type\": \"VARCHAR\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        },\n        {\n          \"name\": \"amount_cents\",\n          \"data_type\": \"INTEGER\",\n          \"description\": null,\n          \"primary_key\": false,\n          \"foreign_key\": false,\n          \"not_null\": false\n        }\n      ],\n      \"primary_key\": null,\n      \"unique_keys\": []\n    }\n  ],\n  \"relationships\": [\n    {\n      \"from\": \"model.jaffle_ods.customer_order_rank\",\n      \"from_columns\": [\n        \"order_id\"\n      ],\n      \"to\": \"model.jaffle_ods.orders\",\n      \"to_columns\": [\n        \"order_id\"\n      ],\n      \"cardinality\": \"one_to_one\",\n      \"optional\": true,\n      \"basis\": \"declared\",\n      \"evidence\": [\n        \"constraint foreign_key on customer_order_rank\",\n        \"test.jaffle_ods.relationships_customer_order_rank_order_id__order_id__ref_orders_.10125cf94b\"\n      ]\n    },\n    {\n      \"from\": \"model.jaffle_ods.orders\",\n      \"from_columns\": [\n        \"customer_id\"\n      ],\n      \"to\": \"model.jaffle_ods.customers\",\n      \"to_columns\": [\n        \"customer_id\"\n      ],\n      \"cardinality\": \"many_to_one\",\n      \"optional\": true,\n      \"basis\": \"tested\",\n      \"evidence\": [\n        \"test.jaffle_ods.relationships_orders_customer_id__customer_id__ref_customers_.c6ec7f58f2\"\n      ]\n    },\n    {\n      \"from\": \"model.jaffle_ods.orders\",\n      \"from_columns\": [\n        \"customer_id\"\n      ],\n      \"to\": \"model.jaffle_ods.stg_customers\",\n      \"to_columns\": [\n        \"customer_id\"\n      ],\n      \"cardinality\": \"unknown\",\n      \"optional\": true,\n      \"basis\": \"joined\",\n      \"evidence\": [\n        \"joined in model.jaffle_ods.customers\"\n      ]\n    },\n    {\n      \"from\": \"model.jaffle_ods.stg_payments\",\n      \"from_columns\": [\n        \"order_id\"\n      ],\n      \"to\": \"model.jaffle_ods.stg_orders\",\n      \"to_columns\": [\n        \"order_id\"\n      ],\n      \"cardinality\": \"many_to_one\",\n      \"optional\": true,\n      \"basis\": \"tested\",\n      \"evidence\": [\n        \"joined in model.jaffle_ods.orders\",\n        \"test.jaffle_ods.relationships_stg_payments_order_id__order_id__ref_stg_orders_.8426a3f3d3\"\n      ]\n    }\n  ],\n  \"diagnostics\": []\n}",
+    "erd": {
+      "schema_version": 1,
+      "entities": [
+        {
+          "id": "model.jaffle_ods.customer_order_rank",
+          "name": "customer_order_rank",
+          "kind": "table",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"customer_order_rank\"",
+          "columns": [
+            {
+              "name": "order_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": true,
+              "not_null": false
+            },
+            {
+              "name": "customer_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": true,
+              "foreign_key": false,
+              "not_null": true
+            },
+            {
+              "name": "amount",
+              "data_type": "DOUBLE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "order_seq",
+              "data_type": "BIGINT",
+              "description": null,
+              "primary_key": true,
+              "foreign_key": false,
+              "not_null": true
+            },
+            {
+              "name": "running_amount",
+              "data_type": "DOUBLE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": {
+            "columns": [
+              "customer_id",
+              "order_seq"
+            ],
+            "basis": "declared",
+            "evidence": [
+              "constraint primary_key on customer_order_rank"
+            ]
+          },
+          "unique_keys": [
+            {
+              "columns": [
+                "order_id"
+              ],
+              "basis": "tested",
+              "evidence": [
+                "test.jaffle_ods.unique_customer_order_rank_order_id.3ddaa5af35"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "model.jaffle_ods.customer_segments",
+          "name": "customer_segments",
+          "kind": "table",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"customer_segments\"",
+          "columns": [
+            {
+              "name": "customer_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "segment",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": null,
+          "unique_keys": []
+        },
+        {
+          "id": "model.jaffle_ods.customers",
+          "name": "customers",
+          "kind": "table",
+          "description": "One row per customer with order statistics.",
+          "relation": "\"jaffle_ods\".\"main\".\"customers\"",
+          "columns": [
+            {
+              "name": "customer_id",
+              "data_type": "INTEGER",
+              "description": "Primary key.",
+              "primary_key": true,
+              "foreign_key": false,
+              "not_null": true
+            },
+            {
+              "name": "first_name",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "last_name",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "full_name",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "first_order",
+              "data_type": "DATE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "most_recent_order",
+              "data_type": "DATE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "number_of_orders",
+              "data_type": "BIGINT",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "lifetime_value",
+              "data_type": "DOUBLE",
+              "description": "Sum of non-returned order amounts, in dollars.",
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "value_tier",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": {
+            "columns": [
+              "customer_id"
+            ],
+            "basis": "tested",
+            "evidence": [
+              "test.jaffle_ods.not_null_customers_customer_id.5c9bf9911d",
+              "test.jaffle_ods.unique_customers_customer_id.c5af1ff4b1"
+            ]
+          },
+          "unique_keys": []
+        },
+        {
+          "id": "model.jaffle_ods.customers_snapshot_view",
+          "name": "customers_snapshot_view",
+          "kind": "view",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"customers_snapshot_view\"",
+          "columns": [
+            {
+              "name": "customer_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "first_name",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "last_name",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "full_name",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "first_order",
+              "data_type": "DATE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "most_recent_order",
+              "data_type": "DATE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "number_of_orders",
+              "data_type": "BIGINT",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "lifetime_value",
+              "data_type": "DOUBLE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "value_tier",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": null,
+          "unique_keys": []
+        },
+        {
+          "id": "model.jaffle_ods.order_events",
+          "name": "order_events",
+          "kind": "table",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"order_events\"",
+          "columns": [
+            {
+              "name": "order_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "event_date",
+              "data_type": "DATE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "event_type",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": null,
+          "unique_keys": []
+        },
+        {
+          "id": "model.jaffle_ods.orders",
+          "name": "orders",
+          "kind": "table",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"orders\"",
+          "columns": [
+            {
+              "name": "order_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": true,
+              "foreign_key": false,
+              "not_null": true
+            },
+            {
+              "name": "customer_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": true,
+              "not_null": false
+            },
+            {
+              "name": "order_date",
+              "data_type": "DATE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "status",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "credit_card_amount",
+              "data_type": "DOUBLE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "coupon_amount",
+              "data_type": "DOUBLE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "bank_transfer_amount",
+              "data_type": "DOUBLE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "gift_card_amount",
+              "data_type": "DOUBLE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "amount",
+              "data_type": "DOUBLE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": {
+            "columns": [
+              "order_id"
+            ],
+            "basis": "declared",
+            "evidence": [
+              "constraint primary_key on orders"
+            ]
+          },
+          "unique_keys": [
+            {
+              "columns": [
+                "order_id"
+              ],
+              "basis": "tested",
+              "evidence": [
+                "test.jaffle_ods.unique_orders_order_id.fed79b3a6e"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "model.jaffle_ods.segment_summary",
+          "name": "segment_summary",
+          "kind": "table",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"segment_summary\"",
+          "columns": [
+            {
+              "name": "segment",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "customers",
+              "data_type": "BIGINT",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": null,
+          "unique_keys": []
+        },
+        {
+          "id": "model.jaffle_ods.stg_customers",
+          "name": "stg_customers",
+          "kind": "view",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"stg_customers\"",
+          "columns": [
+            {
+              "name": "customer_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "first_name",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "last_name",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "email",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "signup_date",
+              "data_type": "DATE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": null,
+          "unique_keys": []
+        },
+        {
+          "id": "model.jaffle_ods.stg_orders",
+          "name": "stg_orders",
+          "kind": "view",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"stg_orders\"",
+          "columns": [
+            {
+              "name": "order_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": true,
+              "foreign_key": false,
+              "not_null": true
+            },
+            {
+              "name": "customer_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "order_date",
+              "data_type": "DATE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "status",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": {
+            "columns": [
+              "order_id"
+            ],
+            "basis": "tested",
+            "evidence": [
+              "test.jaffle_ods.not_null_stg_orders_order_id.81cfe2fe64",
+              "test.jaffle_ods.unique_stg_orders_order_id.e3b841c71a"
+            ]
+          },
+          "unique_keys": []
+        },
+        {
+          "id": "model.jaffle_ods.stg_payments",
+          "name": "stg_payments",
+          "kind": "view",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"stg_payments\"",
+          "columns": [
+            {
+              "name": "payment_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": true,
+              "foreign_key": false,
+              "not_null": true
+            },
+            {
+              "name": "order_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": true,
+              "not_null": false
+            },
+            {
+              "name": "payment_method",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "amount",
+              "data_type": "DOUBLE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": {
+            "columns": [
+              "payment_id"
+            ],
+            "basis": "tested",
+            "evidence": [
+              "test.jaffle_ods.not_null_stg_payments_payment_id.c19cc50075",
+              "test.jaffle_ods.unique_stg_payments_payment_id.3744510712"
+            ]
+          },
+          "unique_keys": []
+        },
+        {
+          "id": "seed.jaffle_ods.raw_customers",
+          "name": "raw_customers",
+          "kind": "seed",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"raw_customers\"",
+          "columns": [
+            {
+              "name": "id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "first_name",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "last_name",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "email",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "signup_date",
+              "data_type": "DATE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": null,
+          "unique_keys": []
+        },
+        {
+          "id": "seed.jaffle_ods.raw_orders",
+          "name": "raw_orders",
+          "kind": "seed",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"raw_orders\"",
+          "columns": [
+            {
+              "name": "id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "user_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "order_date",
+              "data_type": "DATE",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "status",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": null,
+          "unique_keys": []
+        },
+        {
+          "id": "seed.jaffle_ods.raw_payments",
+          "name": "raw_payments",
+          "kind": "seed",
+          "description": null,
+          "relation": "\"jaffle_ods\".\"main\".\"raw_payments\"",
+          "columns": [
+            {
+              "name": "id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "order_id",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "payment_method",
+              "data_type": "VARCHAR",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            },
+            {
+              "name": "amount_cents",
+              "data_type": "INTEGER",
+              "description": null,
+              "primary_key": false,
+              "foreign_key": false,
+              "not_null": false
+            }
+          ],
+          "primary_key": null,
+          "unique_keys": []
+        }
+      ],
+      "relationships": [
+        {
+          "from": "model.jaffle_ods.customer_order_rank",
+          "from_columns": [
+            "order_id"
+          ],
+          "to": "model.jaffle_ods.orders",
+          "to_columns": [
+            "order_id"
+          ],
+          "cardinality": "one_to_one",
+          "optional": true,
+          "basis": "declared",
+          "evidence": [
+            "constraint foreign_key on customer_order_rank",
+            "test.jaffle_ods.relationships_customer_order_rank_order_id__order_id__ref_orders_.10125cf94b"
+          ]
+        },
+        {
+          "from": "model.jaffle_ods.orders",
+          "from_columns": [
+            "customer_id"
+          ],
+          "to": "model.jaffle_ods.customers",
+          "to_columns": [
+            "customer_id"
+          ],
+          "cardinality": "many_to_one",
+          "optional": true,
+          "basis": "tested",
+          "evidence": [
+            "test.jaffle_ods.relationships_orders_customer_id__customer_id__ref_customers_.c6ec7f58f2"
+          ]
+        },
+        {
+          "from": "model.jaffle_ods.orders",
+          "from_columns": [
+            "customer_id"
+          ],
+          "to": "model.jaffle_ods.stg_customers",
+          "to_columns": [
+            "customer_id"
+          ],
+          "cardinality": "unknown",
+          "optional": true,
+          "basis": "joined",
+          "evidence": [
+            "joined in model.jaffle_ods.customers"
+          ]
+        },
+        {
+          "from": "model.jaffle_ods.stg_payments",
+          "from_columns": [
+            "order_id"
+          ],
+          "to": "model.jaffle_ods.stg_orders",
+          "to_columns": [
+            "order_id"
+          ],
+          "cardinality": "many_to_one",
+          "optional": true,
+          "basis": "tested",
+          "evidence": [
+            "joined in model.jaffle_ods.orders",
+            "test.jaffle_ods.relationships_stg_payments_order_id__order_id__ref_stg_orders_.8426a3f3d3"
+          ]
+        }
+      ],
+      "diagnostics": []
+    }
+  },
+  "diagnostics": []
+}

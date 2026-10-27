@@ -1,0 +1,93 @@
+# Vocabulary for describing data models. Domain packs extend this.
+types:
+  - id: BusinessConcept
+    label: Business concept
+    definition: A thing the business talks about, independent of any table.
+  - id: DataEntity
+    label: Data entity
+    definition: A logical entity in a data model, with a grain and keys.
+  - id: DataAsset
+    label: Data asset
+    definition: A physical artifact such as a table, view or dbt model.
+  - id: Attribute
+    label: Attribute
+    definition: A property of a data entity.
+  - id: ModellingStandard
+    label: Modelling standard
+    definition: An agreed rule for how models are named, structured or documented.
+  - id: Decision
+    label: Decision
+    definition: A reviewed design choice with rationale and scope.
+
+predicates:
+  - id: grain
+    label: grain
+    definition: What one row (or one instance) represents.
+    cardinality: one
+    range: literal
+  - id: owned_by
+    label: owned by
+    definition: Team or person accountable for the concept or asset.
+    cardinality: one
+  - id: represents
+    label: represents
+    definition: A data entity or asset that implements a business concept.
+    cardinality: many
+    range: BusinessConcept
+  - id: has_key
+    label: has key
+    definition: Attribute (or attribute set) that identifies an instance. Declared, not proven.
+    cardinality: many
+    range: Attribute
+  - id: relates_to
+    label: relates to
+    definition: A business relationship. Qualify with `cardinality` and `role`; not a foreign key.
+    cardinality: many
+    range: BusinessConcept
+  - id: places
+    label: places
+    cardinality: many
+    range: BusinessConcept
+  - id: contains
+    label: contains
+    cardinality: many
+    range: BusinessConcept
+  - id: applies_to
+    label: applies to
+    definition: Scope of a standard or decision.
+    cardinality: many
+
+  # Physical structure. OpenDataSuite supplies these for dbt projects (onto-ods);
+  # subjects are ODS node ids, columns are `<node id>#<column>`.
+  - id: asset_kind
+    label: asset kind
+    definition: table, view, seed, snapshot or source.
+    cardinality: one
+    range: literal
+  - id: relation
+    label: relation
+    definition: Fully qualified name to query the asset by.
+    cardinality: one
+    range: literal
+  - id: has_column
+    label: has column
+    cardinality: many
+    range: Attribute
+  - id: data_type
+    label: data type
+    cardinality: one
+    range: literal
+  - id: primary_key
+    label: primary key
+    definition: Columns that identify a row. The `basis` qualifier says how ODS knows (declared, tested, joined, inferred).
+    cardinality: one
+    range: literal
+  - id: unique_key
+    label: unique key
+    cardinality: many
+    range: literal
+  - id: references
+    label: references
+    definition: A key relationship between assets (ODS ERD), qualified with columns, cardinality and basis. Not lineage.
+    cardinality: many
+    range: DataAsset

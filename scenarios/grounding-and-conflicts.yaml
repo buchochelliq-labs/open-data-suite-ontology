@@ -1,0 +1,56 @@
+name: grounding surfaces layered facts, conflicts and provenance
+fixture: shop
+steps:
+  - human: "I need a customer dimension for the shop project. What do we already know?"
+  - call: ontology_status
+    expect:
+      - { path: /sources/0/source_id, equals: central }
+      - { path: /sources/0/layer, equals: central }
+      - { path: /priority, equals: [repo, central] }
+      - { path: /pending_proposals, equals: 0 }
+      - { path: /disabled_sources, equals: [] }
+      - { path: /sync_scope, contains: "Teammates sync independently" }
+
+  # Aliases from the central pack make "client" find the customer concept.
+  - call: ontology_search
+    args: { query: client }
+    expect:
+      - { path: /hits/0/id, equals: "concept:customer" }
+      - { path: /notice, contains: untrusted }
+
+  - call: ontology_search
+    args: { query: order, entity_type: DataAsset }
+    expect:
+      - { path: /hits/0/id, equals: "model.shop.fct_orders" }
+
+  # Repository overrides central by configured priority; both candidates are kept.
+  - call: ontology_entity
+    args: { id: "concept:customer" }
+    expect:
+      - { path: /found, equals: true }
+      - { path: /unresolved_conflicts, equals: [] }
+      - { path: /entity, contains: "An account holder with at least one completed order." }
+      - { path: /entity, contains: "resolved_by_priority" }
+      - { path: /entity, contains: "A person or organisation that has bought" }
+      - { path: /entity, contains: "Finance only counts customers" }
+
+  - call: ontology_neighbors
+    args: { id: "concept:order", depth: 2 }
+    expect:
+      - { path: /completeness, equals: complete_within_depth }
+      - { path: /edges, contains: "concept:product" }
+      - { path: /edges, contains: "model.shop.fct_orders" }
+
+  - call: ontology_neighbors
+    args: { id: "concept:order", depth: 3, max_edges: 2 }
+    expect:
+      - { path: /completeness, equals: truncated }
+
+  # Unknown ids are reported as not found, with suggestions, not invented.
+  - call: ontology_entity
+    args: { id: "concept:customers" }
+    expect:
+      - { path: /found, equals: false }
+      - { path: /suggestions, contains: "concept:customer" }
+
+  - agent: "The repository and the central pack define Customer differently; the repository definition wins by configured priority. Which one should the dimension use?"

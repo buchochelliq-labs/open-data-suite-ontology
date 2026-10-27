@@ -1,0 +1,3 @@
+target/manifest.json and target/catalog.json are copied from OpenDataSuite's
+fixtures/dbt/jaffle-ods/artifacts/dbt-1.10 (https://github.com/buchochelliq-labs/open-data-suite,
+tag v0.0.2), licensed under the Apache License, Version 2.0.

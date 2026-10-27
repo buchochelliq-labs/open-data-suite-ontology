@@ -1,0 +1,22 @@
+# What the team knows about the assets ODS describes. Subjects are ODS node ids.
+entities:
+  - id: model.jaffle_ods.orders
+    properties:
+      grain: one row per order
+    relations:
+      - { predicate: represents, target: concept:order }
+      - { predicate: owned_by, target: team:analytics }
+
+  - id: model.jaffle_ods.customers
+    # ODS reads "One row per customer with order statistics." from the dbt docs;
+    # the team's definition is narrower. Priority selects this one; both are kept.
+    definition: One row per customer who has placed at least one completed order.
+    rationale: Agreed with finance; customers without a completed order are prospects.
+    relations:
+      - { predicate: represents, target: concept:customer }
+
+  - id: model.jaffle_ods.order_events
+    properties:
+      grain: one row per order status change
+    relations:
+      - { predicate: represents, target: concept:order }

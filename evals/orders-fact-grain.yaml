@@ -1,0 +1,22 @@
+name: orders-fact-grain
+fixture: jaffle
+prompt: >-
+  Finance wants a fact table of orders with the customer's attributes on each row.
+  What grain and primary key should it have, and how should we define "customer" for it?
+replies:
+  - Use whatever the team has already agreed, and give me your recommendation.
+criteria:
+  - id: grain_per_order
+    answer_contains_any: ["one row per order"]
+  - id: key_order_id
+    answer_contains_any: ["order_id"]
+  # Only the team's agreed definition says this; dbt docs say "with order statistics".
+  - id: agreed_customer_definition
+    answer_contains_any: ["completed order"]
+  - id: surfaces_definition_difference
+    judge: >-
+      Does the assistant point out that the dbt description of the customers model
+      differs from the team's agreed definition of a customer, rather than silently
+      using one of them?
+  - id: grounded
+    called_any: [ontology_entity, ontology_search, ods_describe_entity, ods_find_data, ods_erd]

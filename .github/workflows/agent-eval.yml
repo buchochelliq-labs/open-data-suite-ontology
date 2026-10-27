@@ -1,0 +1,83 @@
+name: Agent eval (small local model)
+
+# Tier 2: a small open model, served by llama.cpp on the runner's CPU, plays
+# the agent against the fixture workspace. Hard assertions are safety
+# invariants; the transcript is uploaded for review and can be promoted to a
+# replay fixture.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      model_repo:
+        description: Hugging Face repository with a GGUF model
+        default: Qwen/Qwen2.5-1.5B-Instruct-GGUF
+      model_file:
+        description: GGUF file in that repository
+        default: qwen2.5-1.5b-instruct-q4_k_m.gguf
+
+env:
+  CARGO_TERM_COLOR: always
+  MODEL_REPO: ${{ inputs.model_repo || 'Qwen/Qwen2.5-1.5B-Instruct-GGUF' }}
+  MODEL_FILE: ${{ inputs.model_file || 'qwen2.5-1.5b-instruct-q4_k_m.gguf' }}
+
+jobs:
+  episode:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache model
+        uses: actions/cache@v4
+        with:
+          path: ~/models
+          key: gguf-${{ env.MODEL_REPO }}-${{ env.MODEL_FILE }}
+
+      - name: Download model
+        run: |
+          mkdir -p ~/models
+          if [ ! -f ~/models/"$MODEL_FILE" ]; then
+            pip install --quiet "huggingface_hub[cli]"
+            huggingface-cli download "$MODEL_REPO" "$MODEL_FILE" --local-dir ~/models
+          fi
+
+      - name: Install llama.cpp server
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p ~/llama && cd ~/llama
+          gh release download --repo ggml-org/llama.cpp --pattern '*bin-ubuntu-x64.zip'
+          unzip -q ./*.zip
+          echo "LLAMA_SERVER=$(find "$PWD" -name llama-server -type f | head -1)" >> "$GITHUB_ENV"
+
+      - name: Start model server
+        run: |
+          nohup "$LLAMA_SERVER" -m ~/models/"$MODEL_FILE" --jinja -c 16384 --port 8080 > ~/llama/server.log 2>&1 &
+          for i in $(seq 1 120); do
+            curl -sf http://127.0.0.1:8080/health && break
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:8080/health
+
+      - name: Run episode
+        env:
+          ONTO_LLM_BASE_URL: http://127.0.0.1:8080/v1
+          ONTO_LLM_MODEL: ${{ env.MODEL_FILE }}
+        run: cargo test -p onto-testkit --features llm --test llm_episode -- --nocapture
+
+      - name: Upload transcript and server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-eval-${{ github.run_id }}
+          path: |
+            target/llm-transcripts/
+            ~/llama/server.log

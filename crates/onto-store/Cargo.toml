@@ -1,0 +1,15 @@
+[package]
+name = "onto-store"
+description = "SQLite store with lexical search and bounded traversal for ontology records"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+onto-core.workspace = true
+rusqlite.workspace = true
+schemars.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

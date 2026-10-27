@@ -1,0 +1,27 @@
+# A dbt project where OpenDataSuite supplies the structure and the ontology adds
+# meaning. Tests replace REPLACED_BY_TESTKIT (central git repository) and
+# ODS_BIN (the `ods` executable).
+
+[resolution]
+mode = "priority"
+priority = ["repo", "dbt", "central"]
+
+[[source]]
+id = "central"
+layer = "central"
+kind = "git"
+url = "REPLACED_BY_TESTKIT"
+path = "packs/core"
+
+[[source]]
+id = "dbt"
+layer = "repository"
+kind = "ods"
+target_dir = "target"
+command = ["ODS_BIN"]
+
+[[source]]
+id = "repo"
+layer = "repository"
+kind = "pack"
+path = ".ontology"
