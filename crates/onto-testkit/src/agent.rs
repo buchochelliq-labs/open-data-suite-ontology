@@ -25,10 +25,14 @@ pub struct ModelConfig {
     /// Tool results are truncated to this many characters to fit small contexts.
     pub max_tool_result_chars: usize,
     pub timeout: Duration,
+    /// Space requests to stay under a provider's per-minute limit (e.g. 5 on
+    /// Gemini's free tier) instead of hitting it and backing off.
+    pub requests_per_minute: Option<u32>,
 }
 
 impl ModelConfig {
-    /// `ONTO_LLM_BASE_URL` (required), `ONTO_LLM_MODEL`, `ONTO_LLM_API_KEY`.
+    /// `ONTO_LLM_BASE_URL` (required), `ONTO_LLM_MODEL`, `ONTO_LLM_API_KEY`,
+    /// `ONTO_LLM_RPM` (requests per minute) and `ONTO_LLM_TIMEOUT_SECS`.
     pub fn from_env() -> Option<Self> {
         let base_url = std::env::var("ONTO_LLM_BASE_URL").ok().filter(|v| !v.is_empty())?;
         Some(Self {
@@ -37,7 +41,8 @@ impl ModelConfig {
             api_key: std::env::var("ONTO_LLM_API_KEY").ok().filter(|v| !v.is_empty()),
             max_turns: 16,
             max_tool_result_chars: 4_000,
-            timeout: Duration::from_secs(600),
+            timeout: Duration::from_secs(env_number("ONTO_LLM_TIMEOUT_SECS").unwrap_or(600)),
+            requests_per_minute: env_number("ONTO_LLM_RPM").map(|n| n as u32).filter(|n| *n > 0),
         })
     }
 }
@@ -84,6 +89,26 @@ fn truncate(text: String, max: usize) -> String {
     format!("{cut}\n[truncated: narrow the request for more]")
 }
 
+fn env_number(name: &str) -> Option<u64> {
+    std::env::var(name).ok().and_then(|v| v.trim().parse().ok())
+}
+
+/// When each endpoint may next be called. Shared by the agent and the judge,
+/// which usually spend the same key's quota.
+static NEXT_SLOT: std::sync::LazyLock<tokio::sync::Mutex<std::collections::HashMap<String, tokio::time::Instant>>> = std::sync::LazyLock::new(Default::default);
+
+/// Wait for this endpoint's next request slot under `config.requests_per_minute`.
+async fn pace(config: &ModelConfig) {
+    let Some(rpm) = config.requests_per_minute else { return };
+    let interval = Duration::from_secs(60) / rpm;
+    let mut slots = NEXT_SLOT.lock().await;
+    let now = tokio::time::Instant::now();
+    let slot = slots.get(&config.base_url).copied().filter(|t| *t > now).unwrap_or(now);
+    slots.insert(config.base_url.clone(), slot + interval);
+    drop(slots);
+    tokio::time::sleep_until(slot).await;
+}
+
 /// Attempts per request when the endpoint is rate-limited or briefly unavailable.
 const ATTEMPTS: u32 = 6;
 /// Longest single wait, whatever `Retry-After` asks for.
@@ -103,6 +128,7 @@ pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messa
     }
     let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
     for attempt in 1..=ATTEMPTS {
+        pace(config).await;
         let mut request = http.post(&url).json(&body);
         if let Some(key) = &config.api_key {
             request = request.bearer_auth(key);

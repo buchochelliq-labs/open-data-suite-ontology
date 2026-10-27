@@ -56,7 +56,10 @@ Free tiers and model lists change often (GitHub Models, once an option, was
 retired on 30 July 2026), so check the provider's current limits. One pass
 (`runs: 1`) is roughly 10 task/condition pairs at about 5–10 requests each,
 plus one judge request per judged criterion. The harness waits and retries
-when it is rate-limited (HTTP 429). Keep `runs` at 1 on free tiers.
+when it is rate-limited (HTTP 429), but it is better not to hit the limit:
+requests are paced to the `rpm` input (`ONTO_LLM_RPM` locally), which defaults to
+5 for `gemini`, 30 for `groq` and 20 for `openrouter`. At 5 a minute a full pass
+takes roughly 15–20 minutes. Keep `runs` at 1 on free tiers.
 
 Locally:
 

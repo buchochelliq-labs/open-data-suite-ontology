@@ -32,6 +32,7 @@ async fn model_loop_drives_tools_and_respects_the_human() {
         max_turns: 10,
         max_tool_result_chars: 300,
         timeout: std::time::Duration::from_secs(10),
+        requests_per_minute: None,
     };
     let mut human =
         ScriptedHuman::new([Reply::Say("Propose grain one row per person.".into()), Reply::AcceptLastProposal { by: "reviewer".into() }, Reply::End]);
@@ -66,6 +67,7 @@ async fn rate_limits_are_retried_and_persistent_errors_reported() {
         max_turns: 2,
         max_tool_result_chars: 300,
         timeout: std::time::Duration::from_secs(10),
+        requests_per_minute: None,
     };
     run_episode(&mut session, &config, "system", "Hi", &mut ScriptedHuman::new([Reply::End])).await.unwrap();
     assert_eq!(seen.lock().unwrap().len(), 3, "two retries, then the answer");
@@ -76,4 +78,26 @@ async fn rate_limits_are_retried_and_persistent_errors_reported() {
     let config = ModelConfig { base_url: url, ..config };
     let err = run_episode(&mut session, &config, "system", "Hi", &mut ScriptedHuman::new([Reply::End])).await.unwrap_err();
     assert!(err.to_string().contains("400"), "{err}");
+}
+
+#[tokio::test]
+async fn requests_are_paced_under_a_per_minute_limit() {
+    let (url, seen) = fake_model(vec![tool_call("1", "ontology_status", json!({})), tool_call("2", "ontology_status", json!({})), say("Done.")]).await;
+    let fixture = Fixture::new("shop").unwrap();
+    let mut session = Session::start(&fixture).await.unwrap();
+    // 300 a minute is one request every 200 ms.
+    let config = ModelConfig {
+        base_url: url,
+        model: "fake".into(),
+        api_key: None,
+        max_turns: 5,
+        max_tool_result_chars: 300,
+        timeout: std::time::Duration::from_secs(10),
+        requests_per_minute: Some(300),
+    };
+    let started = std::time::Instant::now();
+    run_episode(&mut session, &config, "system", "Hi", &mut ScriptedHuman::new([Reply::End])).await.unwrap();
+    assert_eq!(seen.lock().unwrap().len(), 3);
+    assert!(started.elapsed() >= std::time::Duration::from_millis(400), "three requests need two 200 ms gaps, took {:?}", started.elapsed());
+    session.close().await.unwrap();
 }

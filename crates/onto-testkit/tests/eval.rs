@@ -13,7 +13,15 @@ use onto_testkit::fixture::repo_root;
 use serde_json::json;
 
 fn config(base_url: String) -> ModelConfig {
-    ModelConfig { base_url, model: "fake".into(), api_key: None, max_turns: 10, max_tool_result_chars: 4_000, timeout: Duration::from_secs(10) }
+    ModelConfig {
+        base_url,
+        model: "fake".into(),
+        api_key: None,
+        max_turns: 10,
+        max_tool_result_chars: 4_000,
+        timeout: Duration::from_secs(10),
+        requests_per_minute: None,
+    }
 }
 
 #[test]

@@ -34,6 +34,9 @@ on:
       runs:
         description: Repetitions per task and condition (free tiers allow few requests a day)
         default: "1"
+      rpm:
+        description: Requests per minute to stay under (empty = the preset's default, e.g. 5 for gemini)
+        required: false
       local_model_repo:
         description: For `local`. Hugging Face repository with a GGUF model
         default: bartowski/Qwen2.5-7B-Instruct-GGUF
@@ -100,14 +103,17 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           CUSTOM_API_KEY: ${{ secrets.ONTO_LLM_API_KEY }}
           RUNS: ${{ inputs.runs }}
+          RPM: ${{ inputs.rpm }}
         run: |
           case "$PROVIDER" in
-            gemini)     BASE="https://generativelanguage.googleapis.com/v1beta/openai"; KEY="$GEMINI_API_KEY";     DEFAULT="gemini-flash-latest" ;;
-            groq)       BASE="https://api.groq.com/openai/v1";                          KEY="$GROQ_API_KEY";       DEFAULT="openai/gpt-oss-120b" ;;
-            openrouter) BASE="https://openrouter.ai/api/v1";                            KEY="$OPENROUTER_API_KEY"; DEFAULT="openai/gpt-oss-120b:free" ;;
-            local)      BASE="http://127.0.0.1:8080/v1";                                KEY="";                    DEFAULT="$LOCAL_MODEL_FILE" ;;
-            custom)     BASE="$CUSTOM_BASE_URL";                                        KEY="$CUSTOM_API_KEY";     DEFAULT="" ;;
+            gemini)     BASE="https://generativelanguage.googleapis.com/v1beta/openai"; KEY="$GEMINI_API_KEY";     DEFAULT="gemini-flash-latest";      PACE=5 ;;
+            groq)       BASE="https://api.groq.com/openai/v1";                          KEY="$GROQ_API_KEY";       DEFAULT="openai/gpt-oss-120b";      PACE=30 ;;
+            openrouter) BASE="https://openrouter.ai/api/v1";                            KEY="$OPENROUTER_API_KEY"; DEFAULT="openai/gpt-oss-120b:free"; PACE=20 ;;
+            local)      BASE="http://127.0.0.1:8080/v1";                                KEY="";                    DEFAULT="$LOCAL_MODEL_FILE";        PACE="" ;;
+            custom)     BASE="$CUSTOM_BASE_URL";                                        KEY="$CUSTOM_API_KEY";     DEFAULT="";                         PACE="" ;;
           esac
+          # Pace requests below the provider's per-minute limit instead of hitting it.
+          export ONTO_LLM_RPM="${RPM:-$PACE}"
           if [ -z "$BASE" ]; then echo "::error::base_url is required for the custom provider"; exit 1; fi
           if [ "$PROVIDER" != "local" ] && [ -z "$KEY" ]; then
             echo "::error::no API key: add the repository secret for the $PROVIDER provider (see the comment at the top of eval.yml)"; exit 1
@@ -115,7 +121,7 @@ jobs:
           export ONTO_LLM_BASE_URL="$BASE" ONTO_LLM_API_KEY="$KEY" ONTO_LLM_MODEL="${MODEL:-$DEFAULT}"
           if [ -z "$ONTO_LLM_MODEL" ]; then echo "::error::set the model input"; exit 1; fi
           if [ -n "$JUDGE_MODEL" ]; then export ONTO_JUDGE_MODEL="$JUDGE_MODEL"; fi
-          echo "provider=$PROVIDER model=$ONTO_LLM_MODEL runs=$RUNS"
+          echo "provider=$PROVIDER model=$ONTO_LLM_MODEL runs=$RUNS requests_per_minute=${ONTO_LLM_RPM:-unlimited}"
           cargo run -p onto-testkit --features llm --bin onto-eval -- --runs "$RUNS"
 
       - name: Summary
