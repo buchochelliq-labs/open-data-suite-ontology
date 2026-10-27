@@ -1,0 +1,6 @@
+id,product,amount_cents,currency,billing_interval,interval_count,is_trial
+plan_starter_m,Starter,4900,usd,month,1,false
+plan_pro_m,Pro,19900,usd,month,1,false
+plan_pro_y,Pro,199000,usd,year,1,false
+plan_business_m,Business,49900,usd,month,1,false
+plan_trial,Trial,0,usd,month,1,true

@@ -1,0 +1,51 @@
+version: 2
+models:
+  - name: fct_mrr
+    description: Monthly recurring revenue by account and month, with the month's change category.
+    columns:
+      - name: account_id
+        tests: [not_null]
+      - name: month_start
+        tests: [not_null]
+      - name: mrr_usd
+        description: Normalized monthly amount of the account's paid subscriptions active at month end.
+      - name: change_category
+        tests:
+          - accepted_values: {values: [new, expansion, contraction, churn, reactivation, unchanged]}
+  - name: fct_invoices
+    description: Stripe invoices with refunds netted off.
+    columns:
+      - name: invoice_id
+        tests: [unique, not_null]
+      - name: account_id
+        tests:
+          - relationships: {to: ref('dim_accounts'), field: account_id}
+  - name: dim_accounts
+    description: One row per product account.
+    columns:
+      - name: account_id
+        tests: [unique, not_null]
+      - name: has_paid_subscription
+        description: Whether the account has an active, non-trial subscription now.
+  - name: dim_users
+    description: One row per product user.
+    columns:
+      - name: user_id
+        tests: [unique, not_null]
+  - name: dim_plans
+    description: One row per Stripe plan.
+    columns:
+      - name: plan_id
+        tests: [unique, not_null]
+  - name: fct_daily_active_users
+    description: Daily active users, counting distinct users with at least one event that day.
+    columns:
+      - name: activity_date
+        tests: [unique, not_null]
+  - name: fct_account_activity_weekly
+    description: Product activity by account and week.
+  - name: fct_deals
+    description: HubSpot deals with the product account they belong to.
+    columns:
+      - name: deal_id
+        tests: [unique, not_null]

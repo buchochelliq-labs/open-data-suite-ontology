@@ -1,0 +1,32 @@
+name: acme
+version: '1.0.0'
+config-version: 2
+profile: acme
+
+model-paths: [models]
+seed-paths: [seeds]
+macro-paths: [macros]
+target-path: target
+
+seeds:
+  acme:
+    raw:
+      +schema: raw
+
+models:
+  acme:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: analytics
+      +materialized: table
+    legacy:
+      +schema: analytics
+      +materialized: table
+    reporting:
+      +schema: reporting
+      +materialized: table

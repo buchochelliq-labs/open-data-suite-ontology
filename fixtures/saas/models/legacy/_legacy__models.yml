@@ -1,0 +1,7 @@
+version: 2
+models:
+  - name: mrr_legacy
+    description: MRR by subscription.
+    columns:
+      - name: subscription_id
+        tests: [unique, not_null]

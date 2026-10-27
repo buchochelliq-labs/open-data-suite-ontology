@@ -1,0 +1,75 @@
+version: 2
+models:
+  - name: stg_stripe__customers
+    description: Stripe customers in live mode, one row per customer.
+    columns:
+      - name: stripe_customer_id
+        tests: [unique, not_null]
+      - name: account_id
+        description: The product account, from the customer's metadata.
+  - name: stg_stripe__plans
+    description: Stripe prices (plans), with amounts converted from cents to dollars.
+    columns:
+      - name: plan_id
+        tests: [unique, not_null]
+  - name: stg_stripe__subscriptions
+    description: Stripe subscriptions. A plan change creates a new subscription.
+    columns:
+      - name: subscription_id
+        tests: [unique, not_null]
+      - name: stripe_customer_id
+        tests:
+          - relationships: {to: ref('stg_stripe__customers'), field: stripe_customer_id, config: {severity: warn}}
+      - name: status
+        tests:
+          - accepted_values: {values: [active, trialing, past_due, canceled]}
+  - name: stg_stripe__invoices
+    description: Stripe invoices.
+    columns:
+      - name: invoice_id
+        tests: [unique, not_null]
+  - name: stg_stripe__invoice_lines
+    description: Lines on Stripe invoices.
+    columns:
+      - name: invoice_line_id
+        tests: [unique, not_null]
+  - name: stg_stripe__charges
+    description: Stripe charges (card payments).
+    columns:
+      - name: charge_id
+        tests: [unique, not_null]
+  - name: stg_stripe__refunds
+    description: Stripe refunds against charges.
+    columns:
+      - name: refund_id
+        tests: [unique, not_null]
+  - name: stg_app__accounts
+    description: Product accounts, including free, internal and deleted ones.
+    columns:
+      - name: account_id
+        tests: [unique, not_null]
+  - name: stg_app__workspaces
+    description: Workspaces; an account can have several.
+    columns:
+      - name: workspace_id
+        tests: [unique, not_null]
+  - name: stg_app__users
+    description: Product users.
+    columns:
+      - name: user_id
+        tests: [unique, not_null]
+  - name: stg_app__events
+    description: Product events, including logins.
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+  - name: stg_hubspot__companies
+    description: HubSpot companies.
+    columns:
+      - name: hubspot_company_id
+        tests: [unique, not_null]
+  - name: stg_hubspot__deals
+    description: HubSpot deals.
+    columns:
+      - name: deal_id
+        tests: [unique, not_null]

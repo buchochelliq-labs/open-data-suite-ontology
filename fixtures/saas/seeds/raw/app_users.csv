@@ -1,0 +1,10 @@
+id,account_id,email,role,created_at
+u1,101,ana@northwind.example,admin,2026-01-04 18:01:00
+u2,101,ben@northwind.example,member,2026-01-06 09:00:00
+u3,102,cy@globex.example,admin,2026-01-10 12:01:00
+u4,103,dee@initech.example,admin,2026-02-09 09:31:00
+u5,103,eli@initech.example,member,2026-02-15 14:00:00
+u6,104,fay@umbrella.example,admin,2026-02-27 15:01:00
+u7,105,gus@hooli.example,admin,2026-01-19 10:01:00
+u8,106,qa-bot@acme.example,admin,2026-01-01 00:01:00
+u9,107,hal@piedpiper.example,admin,2026-04-02 08:01:00

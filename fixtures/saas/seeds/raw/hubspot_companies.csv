@@ -1,0 +1,7 @@
+id,name,domain,app_account_id,industry,employee_count
+hc_1,Northwind Traders,northwind.example,101,Retail,250
+hc_2,Globex Corporation,globex.example,102,Manufacturing,1200
+hc_3,Initech,initech.example,103,Software,80
+hc_4,Umbrella Corp,umbrella.example,104,Pharmaceuticals,5000
+hc_5,Hooli,hooli.example,105,Software,30
+hc_6,Soylent Corp,soylent.example,,Food,400

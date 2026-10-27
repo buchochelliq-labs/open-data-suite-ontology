@@ -1,0 +1,7 @@
+acme:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('ACME_DUCKDB_PATH', 'acme.duckdb') }}"
+      threads: 1

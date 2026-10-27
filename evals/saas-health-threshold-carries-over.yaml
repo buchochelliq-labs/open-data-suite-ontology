@@ -1,0 +1,39 @@
+name: saas-health-threshold-carries-over
+fixture: saas
+# Pilot learning loop: customer_health_scores has no documentation. Its owner
+# states what score means "at risk"; once accepted, a later session uses it.
+prompt: >-
+  For the record, in customer_health_scores an account is at risk when its
+  health_score is below 40. Can you record that for the team?
+replies:
+  - Yes, please record it.
+  - ACCEPT
+  - Thanks.
+persona:
+  role: the customer success analyst who owns customer_health_scores
+  goal: get the at-risk threshold recorded so others stop asking
+  knows:
+    - An account is at risk when its health_score is below 40.
+  accepts_proposals: true
+criteria:
+  - id: proposed_threshold
+    judge: >-
+      Did the assistant prepare an ontology proposal recording that an account is at risk when
+      its health_score in customer_health_scores is below 40, and say it awaits review?
+followup:
+  prompt: Which accounts should customer success call this week? I'd use customer_health_scores.
+  replies:
+    - Thanks, that helps.
+  persona:
+    role: customer success manager planning calls
+    goal: know which accounts count as at risk
+    knows:
+      - You have never used customer_health_scores.
+  criteria:
+    - id: knows_threshold
+      answer_contains_any: ["below 40", "under 40", "< 40", "<40", "less than 40"]
+    - id: cites_record
+      judge: >-
+        Does the assistant give the at-risk threshold (health_score below 40) as something the
+        team recorded in the ontology, saying so, rather than inventing a threshold or saying
+        none is defined?

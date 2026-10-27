@@ -1,0 +1,5 @@
+id,invoice_id,amount_cents,status,created_at
+ch_1,in_1,19900,succeeded,2026-05-05 09:16:00
+ch_2,in_2,4900,succeeded,2026-05-01 00:06:00
+ch_3,in_3,99800,succeeded,2026-05-10 08:06:00
+ch_4,in_4,199000,succeeded,2026-03-01 10:51:00

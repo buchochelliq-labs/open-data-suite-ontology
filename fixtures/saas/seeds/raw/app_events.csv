@@ -1,0 +1,13 @@
+id,user_id,workspace_id,event_name,occurred_at
+e1,u1,w1,login,2026-06-01 09:00:00
+e2,u1,w1,query_run,2026-06-01 09:05:00
+e3,u2,w2,login,2026-06-01 10:00:00
+e4,u3,w3,login,2026-06-01 11:00:00
+e5,u3,w3,report_viewed,2026-06-01 11:02:00
+e6,u4,w4,project_created,2026-06-01 12:00:00
+e7,u5,w5,login,2026-06-01 13:00:00
+e8,u8,w8,query_run,2026-06-01 14:00:00
+e9,u1,w1,login,2026-06-02 09:00:00
+e10,u6,w6,report_viewed,2026-06-02 10:00:00
+e11,u7,w7,login,2026-06-02 11:00:00
+e12,u9,w9,query_run,2026-06-02 12:00:00

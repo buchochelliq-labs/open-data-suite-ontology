@@ -1,0 +1,25 @@
+name: saas-downgrade-not-churn
+fixture: saas
+# Pilot: fct_mrr reports a plan change as churn then reactivation (the
+# fixture's data really does this). The team's movement definition says a
+# downgrade is contraction, and the model has a recorded known issue.
+prompt: >-
+  fct_mrr says Globex churned in April and then came back as a reactivation in May.
+  Did we really lose them for a month?
+replies:
+  - So how should I report Globex for April?
+persona:
+  role: finance analyst reconciling monthly churn
+  goal: know whether Globex's April churn is real and how to report it
+  knows:
+    - Globex moved from the Pro plan to the Starter plan at the end of April.
+    - You only mention the plan change if the assistant asks what happened to Globex's subscription.
+criteria:
+  - id: names_known_issue
+    answer_contains_any: ["DATA-412", "known issue"]
+  - id: contraction_not_churn
+    judge: >-
+      Does the assistant explain that a plan change recorded as one subscription ending and
+      another starting is not churn under the team's MRR movement definition, and that
+      Globex's April should be reported as contraction (a downgrade), citing the team's
+      definition or the model's recorded known issue?
