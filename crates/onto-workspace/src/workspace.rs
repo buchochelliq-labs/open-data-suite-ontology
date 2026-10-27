@@ -7,7 +7,7 @@ use serde::Serialize;
 use crate::command::CommandSource;
 use crate::config::{CONFIG_FILE, Config, SourceConfig, SourceKind};
 use crate::git::GitSource;
-use crate::local::LocalConfig;
+use crate::local::{LocalConfig, Trust, TrustedCommand};
 use crate::lock::{Lock, LockedSource};
 use crate::pack::PackSource;
 
@@ -37,6 +37,8 @@ pub struct Workspace {
     pub config: Config,
     /// Sources disabled on this machine. Their lock entries are kept.
     pub disabled: Vec<String>,
+    /// Sources whose command was set in `.onto/local.toml`.
+    own_commands: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -73,10 +75,10 @@ impl Workspace {
         let path = root.join(CONFIG_FILE);
         let text = std::fs::read_to_string(&path).map_err(|e| WorkspaceError::Config(format!("cannot read {}: {e}", path.display())))?;
         let shared: Config = toml::from_str(&text).map_err(|e| WorkspaceError::Config(format!("{}: {e}", path.display())))?;
-        Self { root: root.clone(), config: shared.clone(), disabled: Vec::new() }.validate()?;
+        Self { root: root.clone(), config: shared.clone(), disabled: Vec::new(), own_commands: Vec::new() }.validate()?;
         let mut config = shared;
-        let disabled = LocalConfig::read(&root)?.apply(&mut config)?;
-        let workspace = Self { root, config, disabled };
+        let applied = LocalConfig::read(&root)?.apply(&mut config)?;
+        let workspace = Self { root, config, disabled: applied.disabled, own_commands: applied.own_commands };
         workspace.validate()?;
         Ok(workspace)
     }
@@ -131,6 +133,44 @@ impl Workspace {
             SourceKind::Pack { path } => Some(self.root.join(path)),
             _ => None,
         }
+    }
+
+    /// The command a source would run that needs this person's trust, if any.
+    /// The built-in `ods` default and commands set in `.onto/local.toml` need none.
+    pub fn command_needing_trust(&self, source: &SourceConfig) -> Option<Vec<String>> {
+        if self.own_commands.contains(&source.id) {
+            return None;
+        }
+        match &source.kind {
+            SourceKind::Command { command, .. } => Some(command.clone()),
+            SourceKind::Ods { command, .. } if command.as_slice() != ["ods"] => Some(command.clone()),
+            _ => None,
+        }
+    }
+
+    /// Record that this person allows `source_id` to run its current command.
+    pub fn trust(&self, source_id: &str) -> Result<Option<Vec<String>>> {
+        let source = self.source_config(source_id).ok_or_else(|| WorkspaceError::Config(format!("unknown source `{source_id}`")))?;
+        let Some(command) = self.command_needing_trust(source) else {
+            return Ok(None);
+        };
+        let mut trust = Trust::read(&self.root)?;
+        trust.entries.retain(|t| t.source != source_id);
+        trust.entries.push(TrustedCommand { source: source_id.to_string(), command: command.clone(), trusted_at: now_rfc3339() });
+        trust.write(&self.root)?;
+        Ok(Some(command))
+    }
+
+    fn check_trust(&self, source: &SourceConfig) -> Result<()> {
+        if let Some(command) = self.command_needing_trust(source)
+            && !Trust::read(&self.root)?.allows(&source.id, &command)
+        {
+            return Err(WorkspaceError::Config(format!(
+                "source `{}` would run {:?} from onto.toml, which this machine has not trusted (or it changed since). Review it, then run `onto trust {}`",
+                source.id, command, source.id
+            )));
+        }
+        Ok(())
     }
 
     fn build(&self, source: &SourceConfig, lock: Option<&Lock>, locked: bool) -> Result<Box<dyn Source>> {
@@ -216,6 +256,7 @@ impl Workspace {
     }
 
     fn sync_one(&self, store: &mut Store, config: &SourceConfig, lock: Option<&Lock>, locked: bool) -> Result<(Option<String>, usize)> {
+        self.check_trust(config)?;
         let source = self.build(config, lock, locked)?;
         let retrieved_at = now_rfc3339();
         let mut records = Vec::new();

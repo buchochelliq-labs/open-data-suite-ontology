@@ -81,6 +81,7 @@ fn a_missing_ods_is_reported_and_other_sources_still_sync() {
     )
     .unwrap();
     let workspace = onto_workspace::Workspace::load(dir.path()).unwrap();
+    workspace.trust("dbt").unwrap();
     let mut store = workspace.open_store().unwrap();
     let reports = workspace.sync(&mut store, &Default::default()).unwrap();
     let failed = serde_json::to_string(&reports[0]).unwrap();

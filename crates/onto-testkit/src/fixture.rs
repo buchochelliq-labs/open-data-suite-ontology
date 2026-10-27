@@ -77,6 +77,10 @@ impl Fixture {
 
         let fixture = Self { _dir: dir, root, central };
         let workspace = fixture.workspace()?;
+        // Fixture commands are part of this repository; trust them as a person would.
+        for source in &workspace.config.sources {
+            workspace.trust(&source.id)?;
+        }
         let mut store = workspace.open_store()?;
         for report in workspace.sync(&mut store, &SyncOptions::default())? {
             if let SyncOutcome::Failed { error } = report.outcome {

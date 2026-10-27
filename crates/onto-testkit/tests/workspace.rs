@@ -69,6 +69,7 @@ fn command_sources_cannot_choose_their_identity() {
     std::fs::write(fixture.root.join("onto.toml"), config).unwrap();
 
     let workspace = fixture.workspace().unwrap();
+    workspace.trust("catalog").unwrap();
     let mut store = workspace.open_store().unwrap();
     workspace.sync(&mut store, &SyncOptions::default()).unwrap();
     let records = store.records_about("table:orders").unwrap();
@@ -103,4 +104,50 @@ fn local_overrides_are_checked() {
     assert!(fixture.workspace().is_err());
     std::fs::write(fixture.root.join(".onto/local.toml"), "[[source]]\nid = \"repo\"\ncommand = [\"x\"]\n").unwrap();
     assert!(fixture.workspace().err().unwrap().to_string().contains("does not apply"));
+}
+
+fn add_command_source(fixture: &Fixture, script: &str) {
+    let base = std::fs::read_to_string(fixture.root.join("onto.toml")).unwrap();
+    let base = base.split("\n# test command source\n").next().unwrap().to_string();
+    let config = base
+        + &format!(
+            "\n# test command source\n[[source]]\nid = \"catalog\"\nlayer = \"repository\"\nkind = \"command\"\ncommand = [\"sh\", \"-c\", {script:?}]\n"
+        );
+    std::fs::write(fixture.root.join("onto.toml"), config).unwrap();
+}
+
+fn catalog_outcome(fixture: &Fixture) -> String {
+    let workspace = fixture.workspace().unwrap();
+    let mut store = workspace.open_store().unwrap();
+    let reports = workspace.sync(&mut store, &SyncOptions::default()).unwrap();
+    serde_json::to_string(reports.iter().find(|r| r.source_id == "catalog").unwrap()).unwrap()
+}
+
+#[test]
+fn commands_from_shared_config_need_local_trust() {
+    let fixture = Fixture::new("shop").unwrap();
+    let marker = fixture.root.join("ran");
+    add_command_source(&fixture, &format!("touch {}", marker.display()));
+
+    let refused = catalog_outcome(&fixture);
+    assert!(refused.contains("failed") && refused.contains("onto trust catalog"), "{refused}");
+    assert!(!marker.exists(), "an untrusted command must not run");
+
+    fixture.workspace().unwrap().trust("catalog").unwrap();
+    assert!(catalog_outcome(&fixture).contains("synced"));
+    assert!(marker.exists());
+
+    // A pulled change to the command revokes trust.
+    std::fs::remove_file(&marker).unwrap();
+    add_command_source(&fixture, &format!("touch {} && true", marker.display()));
+    assert!(catalog_outcome(&fixture).contains("not trusted"));
+    assert!(!marker.exists());
+}
+
+#[test]
+fn commands_set_locally_are_the_persons_own_choice() {
+    let fixture = Fixture::new("shop").unwrap();
+    add_command_source(&fixture, "exit 1");
+    std::fs::write(fixture.root.join(".onto/local.toml"), "[[source]]\nid = \"catalog\"\ncommand = [\"true\"]\n").unwrap();
+    assert!(catalog_outcome(&fixture).contains("synced"));
 }

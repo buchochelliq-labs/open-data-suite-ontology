@@ -68,6 +68,14 @@ Consistency comes from the shared configuration: `onto.lock` pins central
 packs, and `onto sync --locked` reproduces them in CI. Sources that read local
 state (ODS reads the person's dbt `target/`) reflect that machine.
 
+**Running commands needs local trust.** A `command` source, or an `ods` source
+with a non-default executable, runs a program named in `onto.toml`. Cloning a
+repository and running `onto sync` must not execute whatever it says, so these
+sources fail until the person reviews the command and runs `onto trust <source>`.
+Trust is stored in `.onto/trusted.toml` per source and exact command; a pulled
+change to the command needs trusting again. The built-in `ods` default and
+commands set in `.onto/local.toml` are the person's own choice and need none.
+
 `.onto/local.toml` adjusts sources for one machine, for example disabling a
 source the person cannot access, or pointing at their `ods` binary or dbt target.
 It never changes `onto.toml` or `onto.lock`; a locally disabled source keeps its

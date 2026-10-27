@@ -20,7 +20,7 @@
 use std::path::Path;
 use std::process::Command;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{Config, SourceKind};
 use crate::workspace::{STATE_DIR, WorkspaceError};
@@ -61,9 +61,10 @@ impl LocalConfig {
         toml::from_str(&text).map_err(|e| WorkspaceError::Config(format!("{}: {e}", path.display())))
     }
 
-    /// Apply to the shared config. Returns the ids of sources disabled here.
-    pub fn apply(self, config: &mut Config) -> Result<Vec<String>, WorkspaceError> {
+    /// Apply to the shared config.
+    pub fn apply(self, config: &mut Config) -> Result<Applied, WorkspaceError> {
         let mut disabled = Vec::new();
+        let mut own_commands = Vec::new();
         for local in self.sources {
             let source = config
                 .sources
@@ -79,6 +80,7 @@ impl LocalConfig {
                 SourceKind::Ods { project_dir, target_dir, command, .. } => {
                     if let Some(c) = local.command {
                         *command = c;
+                        own_commands.push(local.id.clone());
                     }
                     if let Some(p) = local.project_dir {
                         *project_dir = p;
@@ -93,6 +95,7 @@ impl LocalConfig {
                     }
                     if let Some(c) = local.command {
                         *command = c;
+                        own_commands.push(local.id.clone());
                     }
                 }
                 _ if local.command.is_some() || local.project_dir.is_some() || local.target_dir.is_some() => {
@@ -103,7 +106,59 @@ impl LocalConfig {
         }
         config.sources.retain(|s| !disabled.contains(&s.id));
         config.resolution.priority.retain(|id| !disabled.contains(id));
-        Ok(disabled)
+        Ok(Applied { disabled, own_commands })
+    }
+}
+
+/// What `.onto/local.toml` changed.
+#[derive(Debug, Default)]
+pub struct Applied {
+    /// Sources disabled on this machine.
+    pub disabled: Vec<String>,
+    /// Sources whose command this person set locally (trusted by definition).
+    pub own_commands: Vec<String>,
+}
+
+pub const TRUST_FILE: &str = "trusted.toml";
+
+/// Commands from shared configuration that this person reviewed and allowed.
+///
+/// Syncing must not run code just because a repository's `onto.toml` names it:
+/// cloning a repository and running `onto sync` would otherwise execute whatever
+/// it says. Trust is per source and per exact command, so a pulled change to a
+/// command needs trusting again.
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct Trust {
+    #[serde(default, rename = "trusted")]
+    pub entries: Vec<TrustedCommand>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct TrustedCommand {
+    pub source: String,
+    pub command: Vec<String>,
+    pub trusted_at: String,
+}
+
+impl Trust {
+    pub fn read(root: &Path) -> Result<Self, WorkspaceError> {
+        let path = root.join(STATE_DIR).join(TRUST_FILE);
+        if !path.is_file() {
+            return Ok(Self::default());
+        }
+        toml::from_str(&std::fs::read_to_string(&path)?).map_err(|e| WorkspaceError::Config(format!("{}: {e}", path.display())))
+    }
+
+    pub fn write(&self, root: &Path) -> Result<(), WorkspaceError> {
+        let dir = root.join(STATE_DIR);
+        std::fs::create_dir_all(&dir)?;
+        let body = toml::to_string(self).map_err(|e| WorkspaceError::Config(e.to_string()))?;
+        std::fs::write(dir.join(TRUST_FILE), format!("# Written by `onto trust`. Commands from onto.toml this machine allows to run.\n{body}"))?;
+        Ok(())
+    }
+
+    pub fn allows(&self, source: &str, command: &[String]) -> bool {
+        self.entries.iter().any(|t| t.source == source && t.command == command)
     }
 }
 

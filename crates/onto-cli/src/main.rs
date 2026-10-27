@@ -63,6 +63,11 @@ enum Command {
         #[command(subcommand)]
         action: ProposalAction,
     },
+    /// Allow a source to run the command onto.toml gives it, after you review it.
+    Trust {
+        /// Source id from onto.toml.
+        source: String,
+    },
     /// Serve the MCP server over stdio.
     Mcp,
 }
@@ -184,6 +189,10 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             print_json(&view)?;
         }
         Command::Neighbors { id, depth, max_edges } => print_json(&store.neighbors(&id, depth, max_edges)?)?,
+        Command::Trust { source } => match workspace.trust(&source)? {
+            Some(command) => println!("Trusted `{source}` to run {command:?} on this machine. A change to this command in onto.toml needs trusting again."),
+            None => println!("`{source}` runs no command from onto.toml; nothing to trust."),
+        },
         Command::Proposals { action } => match action {
             ProposalAction::List => {
                 for (digest, request) in proposals::pending(&store)? {
