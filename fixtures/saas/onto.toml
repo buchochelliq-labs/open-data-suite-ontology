@@ -1,0 +1,27 @@
+# A made-up B2B SaaS dbt project (billing, product usage, CRM) for the pilot (#21).
+# Tests replace REPLACED_BY_TESTKIT (central git repository) and
+# ODS_BIN (the `ods` executable).
+
+[resolution]
+mode = "priority"
+priority = ["repo", "dbt", "central"]
+
+[[source]]
+id = "central"
+layer = "central"
+kind = "git"
+url = "REPLACED_BY_TESTKIT"
+path = "packs/core"
+
+[[source]]
+id = "dbt"
+layer = "repository"
+kind = "ods"
+target_dir = "target"
+command = ["ODS_BIN"]
+
+[[source]]
+id = "repo"
+layer = "repository"
+kind = "pack"
+path = ".ontology"

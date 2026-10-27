@@ -97,9 +97,19 @@ min and max). A gap between conditions smaller than that spread may be noise:
 run more before drawing conclusions. Three runs of every task is a sensible
 minimum for a comparison you want to rely on.
 
+### The pilot project
+
+`fixtures/saas` is a made-up B2B SaaS project (Stripe billing, product
+events, HubSpot) with 27 models and the mess of a real one. It has a
+retired model, a known defect in `fct_mrr`, a DAU model that does not match
+the agreed definition, and finance and sales disagreeing about ARR. Its eight
+`saas-*` tasks include one control task (`saas-deals-to-mrr`) whose answer dbt
+alone shows. Run them with `--task saas`. Its
+[README](../fixtures/saas/README.md) says how to rebuild its dbt artifacts.
+
 ### A fixture from a real project
 
-The fixtures are small and synthetic. To evaluate on your own dbt project:
+The fixtures are small. To evaluate on your own dbt project:
 
 1. Copy the project's `target/manifest.json` and `target/catalog.json` into
    `fixtures/<name>/target/` (run `dbt docs generate` first). Check them for

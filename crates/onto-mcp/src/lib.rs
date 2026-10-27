@@ -417,7 +417,17 @@ impl OntologyServer {
                         if !seen.insert((edge.subject.clone(), edge.predicate.clone(), edge.object.clone(), qualifiers)) {
                             continue;
                         }
-                        if !keeps(include, &team, &edge.sources) {
+                        // A column is part of its model: its edge comes from dbt,
+                        // but facts the team recorded on the column belong with
+                        // the model, so the edge is followed when it leads to them.
+                        let team_column = || -> Result<bool, String> {
+                            if !edge.object.starts_with(&format!("{}#", edge.subject)) {
+                                return Ok(false);
+                            }
+                            let view = Self::resolve(ws, store, &edge.object, None)?;
+                            Ok(!compact::facts(&view, false, |v| keeps(include, &team, &v.sources)).lines.is_empty())
+                        };
+                        if !keeps(include, &team, &edge.sources) && !team_column()? {
                             dbt_only += 1;
                             continue;
                         }

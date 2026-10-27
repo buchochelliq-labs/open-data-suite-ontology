@@ -1,0 +1,7 @@
+# Sales' ARR definition; finance.yaml has finance's.
+entities:
+  - id: concept:arr
+    definition: >-
+      The annualized value of all signed contracts, including closed-won deals
+      whose subscriptions have not started yet.
+    rationale: Sales' definition, used for quota and the pipeline review.

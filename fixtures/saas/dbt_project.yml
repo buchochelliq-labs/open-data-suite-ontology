@@ -1,0 +1,31 @@
+name: acme
+version: '1.0.0'
+config-version: 2
+profile: acme
+
+model-paths: [models]
+macro-paths: [macros]
+target-path: target
+
+# Stands in for the ELT tool: loads data/raw/*.csv into the raw schema, which
+# the sources read. Not seeds, so raw tables are defined once, as sources.
+on-run-start:
+  - "{{ load_raw() }}"
+
+models:
+  acme:
+    staging:
+      +schema: staging
+      +materialized: view
+    intermediate:
+      +schema: intermediate
+      +materialized: view
+    marts:
+      +schema: analytics
+      +materialized: table
+    legacy:
+      +schema: analytics
+      +materialized: table
+    reporting:
+      +schema: reporting
+      +materialized: table
