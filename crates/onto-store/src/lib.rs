@@ -318,6 +318,24 @@ impl Store {
         Ok(Neighborhood { root: root.to_string(), edges: edges.into_values().collect(), completeness })
     }
 
+    /// Every relationship of `node`, in both directions, without a limit, so a
+    /// caller can filter before it counts. Edges are keyed by subject,
+    /// predicate, object and qualifiers, with every source that asserted them.
+    pub fn edges_of(&self, node: &str) -> Result<Vec<Edge>> {
+        let records = self.query_records(
+            "SELECT claim_json, provenance_json FROM records WHERE object_entity IS NOT NULL AND (subject = ?1 OR object_entity = ?1) ORDER BY id",
+            &node,
+        )?;
+        let mut edges: BTreeMap<(String, String, String, String), Edge> = BTreeMap::new();
+        for record in records.into_iter().filter(|r| r.provenance.authority != Authority::Proposed) {
+            let Claim { subject, predicate, object, qualifiers, .. } = record.claim;
+            let target = object.entity().expect("filtered to entity objects").to_string();
+            let key = (subject.clone(), predicate.clone(), target.clone(), serde_json::to_string(&qualifiers)?);
+            edges.entry(key).or_insert_with(|| Edge { subject, predicate, object: target, qualifiers, sources: Vec::new() }).sources.push(record.provenance);
+        }
+        Ok(edges.into_values().collect())
+    }
+
     pub fn put_proposal(&self, proposal: &StoredProposal) -> Result<()> {
         self.conn.execute(
             "INSERT INTO proposals (digest, status, created_at, payload_json) VALUES (?1, ?2, ?3, ?4)

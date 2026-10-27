@@ -5,6 +5,7 @@
 
 use std::time::Duration;
 
+use onto_testkit::Event;
 use onto_testkit::agent::ModelConfig;
 use onto_testkit::eval::errors;
 use onto_testkit::eval::{Agent, Cast, Condition, Exploration, ODS_GUIDANCE, Outcome, SYSTEM_PROMPT, Task, report, run_task, system_prompt};
@@ -40,10 +41,12 @@ fn each_condition_gets_matching_grounding_guidance() {
     let baseline = system_prompt(Condition::ODS_ONLY, None);
     assert!(baseline.starts_with(SYSTEM_PROMPT) && baseline.contains(ODS_GUIDANCE), "the baseline gets equivalent ODS guidance");
     assert!(!baseline.contains("ontology_"), "the baseline names no ontology tools");
+    assert!(baseline.contains("# Steno: brief while working"), "every condition gets the same working style");
     for condition in [Condition::ONTOLOGY_ONLY, Condition::BOTH] {
         let prompt = system_prompt(condition, None);
         assert!(prompt.starts_with(SYSTEM_PROMPT));
         assert!(prompt.contains("# Ground a design in the ontology"), "{condition:?}");
+        assert!(prompt.contains("# Steno: brief while working, clear when answering"), "{condition:?}");
         assert!(!prompt.contains("name: ontology-grounding"), "front matter is stripped");
     }
 }
@@ -137,7 +140,7 @@ async fn conversations_render_as_a_readable_chat() {
     assert!(chat.contains("**🧑 Person:** I'm designing the customer dimension"), "{chat}");
     assert!(chat.contains("🔧 **ontology_entity**"));
     assert!(chat.contains("\"id\": \"concept:customer\""), "arguments are shown in full");
-    assert!(chat.contains("Finance only counts customers"), "tool results are shown in full, not clipped");
+    assert!(chat.contains("An account holder with at least one completed order."), "tool results are shown in full, not clipped");
     assert!(chat.contains("**🤖 Agent:** A customer is an account holder."));
     assert!(chat.contains("| grounded | Pass |"));
 }
@@ -195,4 +198,100 @@ fn characters_read_count_what_the_agent_received() {
     assert_eq!(Exploration::of(&transcript, None).chars_read, 10_000 + 11);
     assert_eq!(capped.entities, 1);
     assert_eq!(capped.empty_searches, vec!["ontology_search: revenue".to_string()]);
+}
+
+#[tokio::test]
+async fn every_judged_question_goes_in_one_request() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("two-questions.yaml"),
+        r#"
+name: two-questions
+fixture: shop
+conditions: [ontology_only]
+prompt: What is a customer?
+criteria:
+  - { id: grounded, judge: "Is the answer grounded?" }
+  - { id: concise, judge: "Is the answer concise?" }
+  - { id: missing, judge: "A question the judge forgets." }
+"#,
+    )
+    .unwrap();
+    let tasks = Task::load_dir(dir.path()).unwrap();
+    let (agent_url, _) = serve(vec![say("An account holder.")]).await;
+    let (judge_url, judge_requests) =
+        serve(vec![say(r#"{"grounded": {"pass": true, "reason": "Cites a source."}, "concise": {"pass": false, "reason": "Too long."}}"#)]).await;
+    let (agent, judge) = (Agent::Api(config(agent_url)), Agent::Api(config(judge_url)));
+    let cast = Cast { judge: Some(&judge), ..Cast::new(&agent) };
+    let result = run_task(&tasks[0], Condition::ONTOLOGY_ONLY, 1, cast).await.unwrap();
+    let outcome = |id: &str| result.criteria.iter().find(|c| c.id == id).unwrap().outcome;
+    assert_eq!((outcome("grounded"), outcome("concise"), outcome("missing")), (Outcome::Pass, Outcome::Fail, Outcome::Error));
+    let requests = judge_requests.lock().unwrap();
+    assert_eq!(requests.len(), 1, "one judge request for three questions");
+    let prompt = requests[0]["messages"][1]["content"].as_str().unwrap();
+    assert!(prompt.contains("- grounded: Is the answer grounded?") && prompt.contains("- concise: Is the answer concise?"));
+}
+
+#[tokio::test]
+async fn a_fact_accepted_in_one_session_is_used_in_the_next() {
+    let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
+    let task = tasks.iter().find(|t| t.name == "snapshot-grain-carries-over").unwrap();
+    let rank = "model.jaffle_ods.customers_snapshot_view";
+    // One scripted model plays the agent in both sessions, in order.
+    let (agent_url, _) = serve(vec![
+        // Session 1: propose, then wait for the person to accept.
+        tool_call("1", "ontology_propose", json!({ "subject": rank, "predicate": "grain", "object": { "literal": "one row per customer per snapshot day" }, "rationale": "The model's owner stated it in this session." })),
+        say("I proposed grain = one row per customer per snapshot day. It is pending until you accept it with onto proposals accept."),
+        say("It is still pending your review."),
+        say("Thanks, it is accepted."),
+        say("You're welcome."),
+        // Session 2: a fresh agent looks the model up.
+        tool_call("2", "ontology_entity", json!({ "id": rank })),
+        say("customers_snapshot_view is one row per customer per snapshot day [repo reviewed by scripted-person]."),
+        say("Glad it helps."),
+    ])
+    .await;
+    let agent = Agent::Api(config(agent_url));
+    // ontology_only: the fixture's ODS source still syncs, but only ontology tools are visible.
+    let result = run_task(task, Condition::ONTOLOGY_ONLY, 1, Cast::new(&agent)).await.unwrap();
+    assert!(result.error.is_none(), "{:?}", result.error);
+    let outcome = |id: &str| result.criteria.iter().find(|c| c.id == id).unwrap_or_else(|| panic!("no {id}")).outcome;
+    assert_eq!(outcome("proposed_grain"), Outcome::Pass);
+    assert_eq!(outcome("followup.knows_recorded_grain"), Outcome::Pass);
+    assert_eq!(outcome("followup.cites_record"), Outcome::Skipped, "no judge configured");
+    assert!(result.violations.is_empty(), "the repository changed only through the accepted proposal: {:?}", result.violations);
+
+    let events = &result.transcript.events;
+    let new_session = events.iter().position(|e| matches!(e, Event::HumanAction { action, .. } if action == "new_session")).expect("a session marker");
+    assert!(events[..new_session].iter().any(|e| matches!(e, Event::HumanAction { action, .. } if action == "accept")), "accepted in session 1");
+    let looked_up = events[new_session..].iter().find_map(|e| match e {
+        Event::ToolCall { tool, result, .. } if tool == "ontology_entity" => Some(result.to_string()),
+        _ => None,
+    });
+    assert!(
+        looked_up.unwrap().contains("grain: one row per customer per snapshot day [repo reviewed by scripted-person]"),
+        "session 2 reads the accepted fact"
+    );
+}
+
+#[test]
+fn repeated_runs_report_their_spread() {
+    use onto_testkit::eval::{CriterionResult, RunResult};
+    let run = |n: usize, outcomes: &[Outcome]| {
+        let task = Task::load_dir(&repo_root().join("evals")).unwrap().into_iter().find(|t| t.name == "order-events-fan-out").unwrap();
+        let mut r = RunResult::not_run(&task, Condition::BOTH, n, "");
+        r.skipped = None;
+        r.criteria = outcomes.iter().enumerate().map(|(i, o)| CriterionResult { id: format!("c{i}"), outcome: *o, detail: String::new() }).collect();
+        r
+    };
+    let one = report(&[run(1, &[Outcome::Pass, Outcome::Pass])]);
+    assert!(!one.contains("Spread across runs"), "a single run has no spread");
+    let three = report(&[run(1, &[Outcome::Pass, Outcome::Pass]), run(2, &[Outcome::Pass, Outcome::Fail]), run(3, &[Outcome::Fail, Outcome::Fail])]);
+    assert!(three.contains("| both | 3 | 50% | 0% | 100% |"), "{three}");
+
+    // A provider outage or an unanswered judgement is not a failing score.
+    let mut outage = run(2, &[Outcome::Fail, Outcome::Fail]);
+    outage.error = Some("model returned 503".into());
+    let errors = report(&[run(1, &[Outcome::Pass, Outcome::Pass]), outage, run(3, &[Outcome::Pass, Outcome::Error])]);
+    assert!(errors.contains("| both | 2 | 100% | 100% | 100% |"), "{errors}");
 }

@@ -28,7 +28,7 @@ async fn ods_structure_and_repository_meaning_meet() {
     assert!(dbt["record_count"].as_u64().unwrap() > 50);
 
     // Structure from ODS, with its evidence; meaning from the repository.
-    let (_, orders) = session.call("ontology_entity", json!({ "id": "model.jaffle_ods.orders" })).await.unwrap();
+    let (_, orders) = session.call("ontology_entity", json!({ "id": "model.jaffle_ods.orders", "detail": "full" })).await.unwrap();
     let pk = &property(&orders, "primary_key")["values"][0];
     assert_eq!(pk["object"], json!({ "literal": ["order_id"] }));
     assert_eq!(pk["qualifiers"]["basis"], "declared");
@@ -45,7 +45,7 @@ async fn ods_structure_and_repository_meaning_meet() {
 
     // ODS's documented description and the team's definition disagree: priority
     // picks the team's, and ODS's stays visible as a candidate.
-    let (_, customers) = session.call("ontology_entity", json!({ "id": "model.jaffle_ods.customers" })).await.unwrap();
+    let (_, customers) = session.call("ontology_entity", json!({ "id": "model.jaffle_ods.customers", "detail": "full" })).await.unwrap();
     let definition = property(&customers, "onto:definition");
     assert_eq!(definition["conflict"]["status"], "resolved_by_priority");
     assert_eq!(definition["conflict"]["selected_source"], "repo");
@@ -58,7 +58,7 @@ async fn ods_structure_and_repository_meaning_meet() {
     assert!(edges.contains("\"predicate\":\"references\""), "ODS key relationships one hop further");
 
     // Columns share ODS's ids.
-    let (_, column) = session.call("ontology_entity", json!({ "id": "model.jaffle_ods.orders#customer_id" })).await.unwrap();
+    let (_, column) = session.call("ontology_entity", json!({ "id": "model.jaffle_ods.orders#customer_id", "detail": "full" })).await.unwrap();
     assert_eq!(column["found"], true);
     assert!(property(&column, "data_type")["values"][0]["object"]["literal"].is_string());
 

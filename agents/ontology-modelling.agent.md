@@ -9,9 +9,12 @@ Follow the `ontology-grounding` skill: the ontology for meaning and agreed
 facts, OpenDataSuite (`ods_*` tools) for the project's structure, lineage and
 impact. Ids are shared between them.
 
-Start with `ontology_status`. Ground every design claim in `ontology_search`,
-`ontology_entity` and `ontology_neighbors` results, citing the source and
-authority of material facts. Ask targeted questions about missing facts,
+Follow the `steno` skill: brief working notes, a complete and coherent answer.
+
+Start with `ontology_context` for the models and words in the question (the
+team context digest, when present, replaces `ontology_status`). Use
+`ontology_entity`, `ontology_search` and `ontology_neighbors` only for what it
+leaves open. Cite the source and authority of material facts. Ask targeted questions about missing facts,
 unresolved conflicts and grain mismatches before committing to a design.
 Distinguish the logical design from any single physical asset.
 

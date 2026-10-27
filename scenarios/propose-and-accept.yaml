@@ -29,7 +29,7 @@ steps:
   - call: ontology_entity
     args: { id: "concept:customer" }
     expect:
-      - { path: /entity, contains: "pending" }
+      - { path: /facts, contains: "grain: PENDING proposal, not a fact: one row per person" }
   - call: ontology_status
     expect:
       - { path: /pending_proposals, equals: 1 }
@@ -41,10 +41,8 @@ steps:
   - call: ontology_entity
     args: { id: "concept:customer" }
     expect:
-      - { path: /entity, contains: "one row per person" }
-      - { path: /entity, contains: "data-team-lead" }
-      - { path: /entity, contains: "reviewed" }
-      - { path: /entity, not_contains: "pending" }
+      - { path: /facts, contains: "grain: one row per person [repo reviewed by data-team-lead]" }
+      - { path: /facts, not_contains: "PENDING" }
   - call: ontology_status
     expect:
       - { path: /pending_proposals, equals: 0 }

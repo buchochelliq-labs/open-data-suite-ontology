@@ -133,6 +133,58 @@ pub struct EpisodeStats {
     pub turns: usize,
     pub tool_calls: usize,
     pub failed_tool_calls: usize,
+    /// Tokens the agent's model used.
+    pub usage: TokenUsage,
+}
+
+/// Tokens a model reported using, summed over requests.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+pub struct TokenUsage {
+    /// Requests counted.
+    pub requests: u64,
+    /// Input tokens processed at full price.
+    pub input: u64,
+    /// Input tokens read from a prompt cache.
+    pub cache_read: u64,
+    /// Input tokens written to a prompt cache.
+    pub cache_write: u64,
+    pub output: u64,
+}
+
+impl TokenUsage {
+    /// From an OpenAI-compatible `usage` object.
+    pub fn from_openai(usage: &Value) -> Self {
+        let n = |k: &str| usage[k].as_u64().unwrap_or(0);
+        let cached = usage["prompt_tokens_details"]["cached_tokens"].as_u64().unwrap_or(0);
+        Self { requests: 1, input: n("prompt_tokens").saturating_sub(cached), cache_read: cached, cache_write: 0, output: n("completion_tokens") }
+    }
+
+    /// From an Anthropic `usage` object, as Claude Code reports it.
+    pub fn from_anthropic(usage: &Value, requests: u64) -> Self {
+        let n = |k: &str| usage[k].as_u64().unwrap_or(0);
+        Self {
+            requests,
+            input: n("input_tokens"),
+            cache_read: n("cache_read_input_tokens"),
+            cache_write: n("cache_creation_input_tokens"),
+            output: n("output_tokens"),
+        }
+    }
+
+    /// Every input and output token, cached or not.
+    pub fn total(&self) -> u64 {
+        self.input + self.cache_read + self.cache_write + self.output
+    }
+}
+
+impl std::ops::AddAssign for TokenUsage {
+    fn add_assign(&mut self, other: Self) {
+        self.requests += other.requests;
+        self.input += other.input;
+        self.cache_read += other.cache_read;
+        self.cache_write += other.cache_write;
+        self.output += other.output;
+    }
 }
 
 /// The digest of the most recent successful `ontology_propose`.
@@ -211,10 +263,10 @@ fn retryable(status: reqwest::StatusCode) -> bool {
     status == reqwest::StatusCode::TOO_MANY_REQUESTS || matches!(status.as_u16(), 500 | 502 | 503 | 504)
 }
 
-/// One chat completion; returns the assistant message. Tools are omitted when
-/// empty. Free tiers (e.g. GitHub Models) rate-limit, so 429 and transient 5xx
+/// One chat completion; returns the assistant message and the tokens used.
+/// Tools are omitted when empty. Free tiers (e.g. GitHub Models) rate-limit, so 429 and transient 5xx
 /// responses are retried, honouring `Retry-After` and otherwise backing off.
-pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messages: &[Value], tools: &[Value]) -> Result<Value> {
+pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messages: &[Value], tools: &[Value]) -> Result<(Value, TokenUsage)> {
     let mut body = json!({ "model": config.model, "messages": messages, "temperature": 0 });
     if !tools.is_empty() {
         body["tools"] = json!(tools);
@@ -266,7 +318,8 @@ pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messa
             bail!("model returned {status}: {}", text.chars().take(500).collect::<String>());
         }
         let body: Value = serde_json::from_str(&text).context("decoding the model response")?;
-        return body["choices"][0]["message"].as_object().cloned().map(Value::Object).with_context(|| format!("no message in {body}"));
+        let message = body["choices"][0]["message"].as_object().cloned().map(Value::Object).with_context(|| format!("no message in {body}"))?;
+        return Ok((message, TokenUsage::from_openai(&body["usage"])));
     }
     unreachable!("the last attempt returns or bails")
 }
@@ -302,7 +355,8 @@ pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_pro
         stats.turns += 1;
         chat(format!("· model request {} ({} messages, {} tools)", stats.turns, messages.len(), tools.len()));
         let started = std::time::Instant::now();
-        let message = complete(&http, config, &messages, &tools).await?;
+        let (message, usage) = complete(&http, config, &messages, &tools).await?;
+        stats.usage += usage;
         chat(format!("· model replied in {:.1}s", started.elapsed().as_secs_f64()));
         let calls = message["tool_calls"].as_array().cloned().unwrap_or_default();
         let text = message["content"].as_str().unwrap_or_default().trim().to_string();

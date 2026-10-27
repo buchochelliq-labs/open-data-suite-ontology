@@ -75,8 +75,10 @@ async fn main() -> Result<()> {
     let (agent, judge, person) = if std::env::var("ONTO_AGENT").is_ok_and(|a| a == "claude-code") {
         let config = ClaudeCodeConfig::from_env();
         eprintln!("agent: Claude Code ({}), onto at {}", config.model.as_deref().unwrap_or("default model"), config.onto_bin.display());
-        let person = ClaudeCodeConfig { model: std::env::var("ONTO_HUMAN_MODEL").ok().filter(|m| !m.is_empty()).or(config.model.clone()), ..config.clone() };
-        (Agent::ClaudeCode(config.clone()), (!args.no_judge).then_some(Agent::ClaudeCode(config)), simulated.then_some(Agent::ClaudeCode(person)))
+        // The judge and the person can run on a smaller model (ONTO_JUDGE_MODEL, ONTO_HUMAN_MODEL).
+        let role = |var: &str| ClaudeCodeConfig { model: std::env::var(var).ok().filter(|m| !m.is_empty()).or(config.model.clone()), ..config.clone() };
+        let (judge, person) = (role("ONTO_JUDGE_MODEL"), role("ONTO_HUMAN_MODEL"));
+        (Agent::ClaudeCode(config), (!args.no_judge).then_some(Agent::ClaudeCode(judge)), simulated.then_some(Agent::ClaudeCode(person)))
     } else {
         let Some(mut config) = ModelConfig::from_env() else {
             bail!("set ONTO_LLM_BASE_URL (and ONTO_LLM_MODEL, ONTO_LLM_API_KEY), or ONTO_AGENT=claude-code")
@@ -129,6 +131,19 @@ async fn main() -> Result<()> {
     if let Some(budget) = &budget {
         eprintln!("model requests used: {}", budget.used());
     }
+    let mut total = onto_testkit::agent::TokenUsage::default();
+    for r in &results {
+        total += r.tokens.agent;
+        total += r.tokens.person;
+        total += r.tokens.judge;
+    }
+    eprintln!(
+        "tokens used: {} new input, {} cached input, {} output, over {} requests",
+        total.input + total.cache_write,
+        total.cache_read,
+        total.output,
+        total.requests
+    );
     let markdown = report(&results);
     std::fs::write(out.join("report.md"), &markdown)?;
     std::fs::write(out.join("results.json"), serde_json::to_string_pretty(&results)?)?;

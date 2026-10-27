@@ -23,16 +23,38 @@ steps:
     expect:
       - { path: /hits/0/id, equals: "model.shop.fct_orders" }
 
-  # Repository overrides central by configured priority; both candidates are kept.
+  # Repository overrides central by configured priority; both candidates are
+  # kept. Compact by default: one line per fact with source and authority.
   - call: ontology_entity
     args: { id: "concept:customer" }
     expect:
       - { path: /found, equals: true }
-      - { path: /unresolved_conflicts, equals: [] }
-      - { path: /entity, contains: "An account holder with at least one completed order." }
+      - { path: /label, equals: Customer }
+      - { path: /facts, contains: "definition: sources disagree (settled by source priority in favour of repo)" }
+      - { path: /facts, contains: "An account holder with at least one completed order." }
+      - { path: /facts, contains: "A person or organisation that has bought" }
+      - { path: /facts, not_contains: "retrieved_at" }
+
+  # Full provenance on request, including each source's rationale.
+  - call: ontology_entity
+    args: { id: "concept:customer", detail: full }
+    expect:
       - { path: /entity, contains: "resolved_by_priority" }
-      - { path: /entity, contains: "A person or organisation that has bought" }
       - { path: /entity, contains: "Finance only counts customers" }
+
+  # One call for several entities and the relationships between them.
+  - call: ontology_context
+    args: { ids: ["concept:order"], terms: [client] }
+    expect:
+      - { path: /entities/0/id, equals: "concept:order" }
+      - { path: /entities, contains: "concept:customer" }
+      - { path: /relationships, contains: "concept:customer places → concept:order (cardinality: one_to_many)" }
+
+  - call: ontology_context
+    args: { terms: [zebra] }
+    expect:
+      - { path: /not_found, equals: [zebra] }
+      - { path: /entities, equals: [] }
 
   - call: ontology_neighbors
     args: { id: "concept:order", depth: 2 }

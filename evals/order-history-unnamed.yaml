@@ -17,6 +17,12 @@ criteria:
     answer_contains_any: ["order_events"]
   - id: knows_event_grain
     answer_contains_any: ["status change"]
+  # A model can guess "status change" from the columns; only the ontology says
+  # it is agreed. A rerun showed ods_only passing the keyword on a guess.
+  - id: grain_is_cited
+    judge: >-
+      Does the assistant present "one row per order status change" as the team's agreed or
+      recorded grain, citing where it comes from, rather than as a guess from column names?
   - id: fix
     judge: >-
       Does the assistant explain that the history model has several rows per order (one per

@@ -1,0 +1,12 @@
+# Fixture for ontology_context edge cases: relationships that differ only in
+# qualifiers, and an entity with more relationships than one call returns.
+
+[resolution]
+mode = "priority"
+priority = ["repo"]
+
+[[source]]
+id = "repo"
+layer = "repository"
+kind = "pack"
+path = ".ontology"
