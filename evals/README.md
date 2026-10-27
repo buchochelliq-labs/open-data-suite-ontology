@@ -48,6 +48,10 @@ workflow from the Actions tab and pick a provider preset:
 | `local` | Free, no account | None | llama.cpp on the runner (default Qwen2.5 7B). Slow on CPU, and a weaker agent and judge |
 | `custom` | Your provider | Input `base_url`, secret `ONTO_LLM_API_KEY` | Any OpenAI-compatible endpoint |
 
+Keys are secrets of the repository's `ai` environment (**Settings →
+Environments → ai**); repository secrets with the same names also work. If the
+environment requires reviewers, each run waits for approval before it starts.
+
 Free tiers and model lists change often (GitHub Models, once an option, was
 retired on 30 July 2026), so check the provider's current limits. One pass
 (`runs: 1`) is roughly 10 task/condition pairs at about 5–10 requests each,
