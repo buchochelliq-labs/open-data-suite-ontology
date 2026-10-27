@@ -37,40 +37,34 @@ change without a person accepting, proposals need a rationale).
 
 ## Running
 
-### Free: GitHub Models (default)
+Any OpenAI-compatible endpoint with tool calling works. Run the **Evaluate**
+workflow from the Actions tab and pick a provider preset:
 
-Run the **Evaluate** workflow from the Actions tab. It uses GitHub Models with
-the workflow's own `GITHUB_TOKEN` (`permissions: models: read`), so no secret or
-paid account is needed. The default model is `openai/gpt-4.1-mini`; any GitHub
-Models id with tool calling works.
+| Preset | Cost | Setup | Notes |
+|---|---|---|---|
+| `gemini` (default) | Free tier | Repository secret `GEMINI_API_KEY` from Google AI Studio, no card | Most free headroom; free-tier inputs may be used by Google for training (the fixtures are synthetic). Model `gemini-flash-latest` |
+| `groq` | Free tier | Secret `GROQ_API_KEY` | Low tokens per minute and per day; may not finish a full pass |
+| `openrouter` | Free models | Secret `OPENROUTER_API_KEY` | About 50 requests a day on `:free` models |
+| `local` | Free, no account | None | llama.cpp on the runner (default Qwen2.5 7B). Slow on CPU, and a weaker agent and judge |
+| `custom` | Your provider | Input `base_url`, secret `ONTO_LLM_API_KEY` | Any OpenAI-compatible endpoint |
 
-GitHub Models' free tier is rate-limited per account, and the limits are lower
-for larger models. One pass (`runs: 1`) is roughly 10 task/condition pairs at
-about 5–10 requests each, plus one judge request per judged criterion. Keep
-`runs` at 1 on the free tier, and use a smaller model if you hit the daily
-limit. The harness waits and retries when it is rate-limited (HTTP 429). If
-your organisation has disabled GitHub Models, an owner can enable it in the
-organisation's settings.
+Free tiers and model lists change often (GitHub Models, once an option, was
+retired on 30 July 2026), so check the provider's current limits. One pass
+(`runs: 1`) is roughly 10 task/condition pairs at about 5–10 requests each,
+plus one judge request per judged criterion. The harness waits and retries
+when it is rate-limited (HTTP 429). Keep `runs` at 1 on free tiers.
 
-Locally, a GitHub personal access token with `models:read` works the same way:
-
-```sh
-ONTO_LLM_BASE_URL=https://models.github.ai/inference ONTO_LLM_MODEL=openai/gpt-4.1-mini \
-ONTO_LLM_API_KEY=<token with models:read> cargo run -p onto-testkit --features llm --bin onto-eval -- --runs 1
-```
-
-### Any OpenAI-compatible provider
+Locally:
 
 ```sh
 pip install opendatasuite==0.0.2
-ONTO_LLM_BASE_URL=<OpenAI-compatible URL ending in /v1> ONTO_LLM_MODEL=<model> ONTO_LLM_API_KEY=<key> \
-  cargo run -p onto-testkit --features llm --bin onto-eval -- --runs 3
+ONTO_LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai ONTO_LLM_MODEL=gemini-flash-latest \
+ONTO_LLM_API_KEY=<key> cargo run -p onto-testkit --features llm --bin onto-eval -- --runs 1
 ```
 
 Writes `target/eval/report.md` (pass counts per task, criterion and
 condition), `results.json`, and one transcript per run that can be replayed as
-a regression test. In the workflow, choose provider `custom`, set `base_url`,
-and add the `ONTO_LLM_API_KEY` repository secret.
+a regression test.
 
 Four tasks are a starting point, not a benchmark. Add tasks from real
 modelling questions as they come up; small differences between conditions

@@ -132,6 +132,14 @@ pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messa
     unreachable!("the last attempt returns or bails")
 }
 
+/// A tool's input schema without the `$schema` dialect marker, which some
+/// OpenAI-compatible endpoints reject in function parameters.
+fn portable_schema(schema: &serde_json::Map<String, Value>) -> Value {
+    let mut schema = schema.clone();
+    schema.remove("$schema");
+    Value::Object(schema)
+}
+
 /// Run one conversation: `opening` from the person, then alternate model turns
 /// (with tool calls) and scripted replies until the script ends or `max_turns`.
 pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_prompt: &str, opening: &str, human: &mut ScriptedHuman) -> Result<EpisodeStats> {
@@ -140,7 +148,7 @@ pub async fn run_episode(session: &mut Session, config: &ModelConfig, system_pro
         .tools()
         .await?
         .into_iter()
-        .map(|t| json!({ "type": "function", "function": { "name": t.name, "description": t.description, "parameters": *t.input_schema } }))
+        .map(|t| json!({ "type": "function", "function": { "name": t.name, "description": t.description, "parameters": portable_schema(&t.input_schema) } }))
         .collect();
     let system = match session.instructions() {
         Some(instructions) => format!("{system_prompt}\n\n{instructions}"),

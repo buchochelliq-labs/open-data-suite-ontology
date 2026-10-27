@@ -48,6 +48,7 @@ async fn model_loop_drives_tools_and_respects_the_human() {
     let first = &requests[0];
     let tool_names: Vec<&str> = first["tools"].as_array().unwrap().iter().map(|t| t["function"]["name"].as_str().unwrap()).collect();
     assert!(tool_names.contains(&"ontology_propose"));
+    assert!(first["tools"].as_array().unwrap().iter().all(|t| t["function"]["parameters"].get("$schema").is_none()), "schemas are portable");
     assert!(first["messages"][0]["content"].as_str().unwrap().contains("untrusted evidence"), "server instructions reach the model");
     let tool_message = requests[1]["messages"].as_array().unwrap().iter().find(|m| m["role"] == "tool").unwrap();
     assert!(tool_message["content"].as_str().unwrap().contains("[truncated"), "tool results are budgeted");
