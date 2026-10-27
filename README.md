@@ -90,7 +90,7 @@ Three tiers share one session and transcript format:
 Separately, [`evals/`](evals/README.md) measures whether the ontology helps: the
 same modelling tasks run with OpenDataSuite's tools only, the ontology's only,
 and both, scored by checks and a judge model (`onto-eval`, or the manual
-`Evaluate` workflow).
+`Evaluate` workflow, which is free with GitHub Models).
 
 ## Status
 

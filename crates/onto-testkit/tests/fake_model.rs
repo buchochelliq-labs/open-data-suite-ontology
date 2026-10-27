@@ -4,7 +4,7 @@
 #![cfg(feature = "llm")]
 
 use onto_testkit::agent::{ModelConfig, Reply, ScriptedHuman, run_episode};
-use onto_testkit::fake_model::{serve as fake_model, tool_call};
+use onto_testkit::fake_model::{error, say, serve as fake_model, tool_call};
 use onto_testkit::{Event, Fixture, Session, invariants};
 use serde_json::json;
 
@@ -51,4 +51,28 @@ async fn model_loop_drives_tools_and_respects_the_human() {
     assert!(first["messages"][0]["content"].as_str().unwrap().contains("untrusted evidence"), "server instructions reach the model");
     let tool_message = requests[1]["messages"].as_array().unwrap().iter().find(|m| m["role"] == "tool").unwrap();
     assert!(tool_message["content"].as_str().unwrap().contains("[truncated"), "tool results are budgeted");
+}
+
+#[tokio::test]
+async fn rate_limits_are_retried_and_persistent_errors_reported() {
+    let (url, seen) = fake_model(vec![error(429, Some("0")), error(503, Some("0")), say("Hello.")]).await;
+    let fixture = Fixture::new("shop").unwrap();
+    let mut session = Session::start(&fixture).await.unwrap();
+    let config = ModelConfig {
+        base_url: url,
+        model: "fake".into(),
+        api_key: None,
+        max_turns: 2,
+        max_tool_result_chars: 300,
+        timeout: std::time::Duration::from_secs(10),
+    };
+    run_episode(&mut session, &config, "system", "Hi", &mut ScriptedHuman::new([Reply::End])).await.unwrap();
+    assert_eq!(seen.lock().unwrap().len(), 3, "two retries, then the answer");
+    assert_eq!(session.close().await.unwrap().agent_texts().collect::<Vec<_>>(), vec!["Hello."]);
+
+    let (url, _) = fake_model(vec![error(400, None)]).await;
+    let mut session = Session::start(&fixture).await.unwrap();
+    let config = ModelConfig { base_url: url, ..config };
+    let err = run_episode(&mut session, &config, "system", "Hi", &mut ScriptedHuman::new([Reply::End])).await.unwrap_err();
+    assert!(err.to_string().contains("400"), "{err}");
 }

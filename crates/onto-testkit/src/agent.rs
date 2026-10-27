@@ -84,23 +84,52 @@ fn truncate(text: String, max: usize) -> String {
     format!("{cut}\n[truncated: narrow the request for more]")
 }
 
-/// One chat completion; returns the assistant message. Tools are omitted when empty.
+/// Attempts per request when the endpoint is rate-limited or briefly unavailable.
+const ATTEMPTS: u32 = 6;
+/// Longest single wait, whatever `Retry-After` asks for.
+const MAX_WAIT: Duration = Duration::from_secs(120);
+
+fn retryable(status: reqwest::StatusCode) -> bool {
+    status == reqwest::StatusCode::TOO_MANY_REQUESTS || matches!(status.as_u16(), 500 | 502 | 503 | 504)
+}
+
+/// One chat completion; returns the assistant message. Tools are omitted when
+/// empty. Free tiers (e.g. GitHub Models) rate-limit, so 429 and transient 5xx
+/// responses are retried, honouring `Retry-After` and otherwise backing off.
 pub(crate) async fn complete(http: &reqwest::Client, config: &ModelConfig, messages: &[Value], tools: &[Value]) -> Result<Value> {
     let mut body = json!({ "model": config.model, "messages": messages, "temperature": 0 });
     if !tools.is_empty() {
         body["tools"] = json!(tools);
     }
-    let mut request = http.post(format!("{}/chat/completions", config.base_url.trim_end_matches('/'))).json(&body);
-    if let Some(key) = &config.api_key {
-        request = request.bearer_auth(key);
+    let url = format!("{}/chat/completions", config.base_url.trim_end_matches('/'));
+    for attempt in 1..=ATTEMPTS {
+        let mut request = http.post(&url).json(&body);
+        if let Some(key) = &config.api_key {
+            request = request.bearer_auth(key);
+        }
+        let response = request.send().await.context("calling the model")?;
+        let status = response.status();
+        if retryable(status) && attempt < ATTEMPTS {
+            let wait = response
+                .headers()
+                .get(reqwest::header::RETRY_AFTER)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|v| v.trim().parse::<u64>().ok())
+                .map(Duration::from_secs)
+                .unwrap_or_else(|| Duration::from_secs(2u64.pow(attempt)))
+                .min(MAX_WAIT);
+            eprintln!("model returned {status}; retrying in {}s (attempt {attempt}/{ATTEMPTS})", wait.as_secs());
+            tokio::time::sleep(wait).await;
+            continue;
+        }
+        let text = response.text().await.context("reading the model response")?;
+        if !status.is_success() {
+            bail!("model returned {status}: {}", text.chars().take(500).collect::<String>());
+        }
+        let body: Value = serde_json::from_str(&text).context("decoding the model response")?;
+        return body["choices"][0]["message"].as_object().cloned().map(Value::Object).with_context(|| format!("no message in {body}"));
     }
-    let response = request.send().await.context("calling the model")?;
-    let status = response.status();
-    let body: Value = response.json().await.context("decoding the model response")?;
-    if !status.is_success() {
-        bail!("model returned {status}: {body}");
-    }
-    body["choices"][0]["message"].as_object().cloned().map(Value::Object).with_context(|| format!("no message in {body}"))
+    unreachable!("the last attempt returns or bails")
 }
 
 /// Run one conversation: `opening` from the person, then alternate model turns

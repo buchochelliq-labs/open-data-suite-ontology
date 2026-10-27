@@ -1,25 +1,36 @@
 name: Evaluate (does the ontology help?)
 
-# Runs evals/*.yaml with a capable model under three conditions: OpenDataSuite
-# tools only, ontology tools only, and both. Manual, because it calls a paid
-# model. Configure the repository secret ONTO_LLM_API_KEY (and optionally
-# ONTO_JUDGE_API_KEY) first.
+# Runs evals/*.yaml under three conditions: OpenDataSuite tools only, ontology
+# tools only, and both. Manual.
+#
+# Default provider: GitHub Models, which is free (rate-limited) and uses this
+# workflow's GITHUB_TOKEN, so no secret is needed. For another OpenAI-compatible
+# provider choose `custom`, set `base_url`, and add the ONTO_LLM_API_KEY secret.
 
 on:
   workflow_dispatch:
     inputs:
-      base_url:
-        description: OpenAI-compatible base URL (including /v1)
-        required: true
+      provider:
+        description: Model provider
+        type: choice
+        options: [github-models, custom]
+        default: github-models
       model:
-        description: Model for the agent
-        required: true
+        description: Agent model (GitHub Models ids look like openai/gpt-4.1-mini)
+        default: openai/gpt-4.1-mini
       judge_model:
-        description: Model for judged criteria (defaults to the agent model)
+        description: Judge model (defaults to the agent model)
+        required: false
+      base_url:
+        description: For `custom` only. OpenAI-compatible base URL including /v1
         required: false
       runs:
-        description: Repetitions per task and condition
-        default: "3"
+        description: Repetitions per task and condition (free tiers allow few requests a day)
+        default: "1"
+
+permissions:
+  contents: read
+  models: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -27,7 +38,7 @@ env:
 jobs:
   eval:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -39,12 +50,25 @@ jobs:
 
       - name: Run evaluation
         env:
-          ONTO_LLM_BASE_URL: ${{ inputs.base_url }}
+          PROVIDER: ${{ inputs.provider }}
+          CUSTOM_BASE_URL: ${{ inputs.base_url }}
+          GITHUB_MODELS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CUSTOM_API_KEY: ${{ secrets.ONTO_LLM_API_KEY }}
+          CUSTOM_JUDGE_API_KEY: ${{ secrets.ONTO_JUDGE_API_KEY }}
           ONTO_LLM_MODEL: ${{ inputs.model }}
-          ONTO_LLM_API_KEY: ${{ secrets.ONTO_LLM_API_KEY }}
           ONTO_JUDGE_MODEL: ${{ inputs.judge_model }}
-          ONTO_JUDGE_API_KEY: ${{ secrets.ONTO_JUDGE_API_KEY }}
-        run: cargo run -p onto-testkit --features llm --bin onto-eval -- --runs "${{ inputs.runs }}"
+          RUNS: ${{ inputs.runs }}
+        run: |
+          if [ "$PROVIDER" = "github-models" ]; then
+            export ONTO_LLM_BASE_URL="https://models.github.ai/inference"
+            export ONTO_LLM_API_KEY="$GITHUB_MODELS_TOKEN"
+          else
+            if [ -z "$CUSTOM_BASE_URL" ]; then echo "::error::base_url is required for the custom provider"; exit 1; fi
+            export ONTO_LLM_BASE_URL="$CUSTOM_BASE_URL"
+            export ONTO_LLM_API_KEY="$CUSTOM_API_KEY"
+            export ONTO_JUDGE_API_KEY="$CUSTOM_JUDGE_API_KEY"
+          fi
+          cargo run -p onto-testkit --features llm --bin onto-eval -- --runs "$RUNS"
 
       - name: Summary
         if: always()
