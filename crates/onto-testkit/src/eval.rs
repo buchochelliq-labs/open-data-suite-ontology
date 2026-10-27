@@ -112,6 +112,8 @@ pub enum Outcome {
     Pass,
     Fail,
     Skipped,
+    /// The judge could not be reached or answered unusably: not a score.
+    Error,
 }
 
 #[derive(Debug, Serialize)]
@@ -128,6 +130,9 @@ pub struct RunResult {
     pub run: usize,
     /// Set when the run could not happen (e.g. `ods` missing).
     pub skipped: Option<String>,
+    /// Set when the model could not be reached or failed mid-episode; the
+    /// run's scores then say nothing about the ontology.
+    pub error: Option<String>,
     pub criteria: Vec<CriterionResult>,
     pub tool_calls: usize,
     pub failed_tool_calls: usize,
@@ -213,7 +218,7 @@ async fn score(criterion: &Criterion, transcript: &Transcript, judge_model: Opti
             Some(config) => match judge(http, config, question, transcript).await {
                 Ok((true, reason)) => (Outcome::Pass, reason),
                 Ok((false, reason)) => (Outcome::Fail, reason),
-                Err(e) => (Outcome::Skipped, format!("judge failed: {e:#}")),
+                Err(e) => (Outcome::Error, format!("judge failed: {e:#}")),
             },
         },
     };
@@ -227,6 +232,7 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Mod
         condition,
         run,
         skipped: None,
+        error: None,
         criteria: Vec::new(),
         tool_calls: 0,
         failed_tool_calls: 0,
@@ -258,7 +264,7 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, agent: &Mod
             result.tool_calls = stats.tool_calls;
             result.failed_tool_calls = stats.failed_tool_calls;
         }
-        Err(e) => result.warnings.push(format!("episode ended early: {e:#}")),
+        Err(e) => result.error = Some(format!("{e:#}")),
     }
 
     let report = invariants::check(&transcript, &before, &fixture.repository_files()?);
@@ -312,8 +318,28 @@ pub fn report(results: &[RunResult]) -> String {
     out.push_str(&format!("| **All** | | {} |\n", conditions.iter().map(|c| cell(totals.get(c))).collect::<Vec<_>>().join(" | ")));
     let skipped: Vec<String> = results.iter().filter_map(|r| r.skipped.as_ref().map(|s| format!("{} / {}: {s}", r.task, r.condition.name()))).collect();
     out.push_str(&format!("\nInvariant violations: {violations}\n"));
+    let errors = errors(results);
+    if !errors.is_empty() {
+        out.push_str(&format!("\n**Errors ({}): these runs or judgements are not scores.**\n- {}\n", errors.len(), errors.join("\n- ")));
+    }
     if !skipped.is_empty() {
         out.push_str(&format!("\nSkipped runs:\n- {}\n", skipped.join("\n- ")));
+    }
+    out
+}
+
+/// Runs whose model failed and judged criteria the judge could not answer.
+/// A provider outage must not read as a low score.
+pub fn errors(results: &[RunResult]) -> Vec<String> {
+    let mut out = Vec::new();
+    for r in results {
+        let at = format!("{} / {} / run {}", r.task, r.condition.name(), r.run);
+        if let Some(error) = &r.error {
+            out.push(format!("{at}: {}", error.chars().take(300).collect::<String>()));
+        }
+        for c in r.criteria.iter().filter(|c| c.outcome == Outcome::Error) {
+            out.push(format!("{at}: {}: {}", c.id, c.detail.chars().take(300).collect::<String>()));
+        }
     }
     out
 }

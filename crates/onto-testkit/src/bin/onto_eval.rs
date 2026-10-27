@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use clap::Parser;
 use onto_testkit::agent::ModelConfig;
-use onto_testkit::eval::{Condition, Task, report, run_task};
+use onto_testkit::eval::{Condition, Task, errors, report, run_task};
 use onto_testkit::fixture::repo_root;
 
 #[derive(Parser)]
@@ -75,6 +75,10 @@ async fn main() -> Result<()> {
     std::fs::write(out.join("report.md"), &markdown)?;
     std::fs::write(out.join("results.json"), serde_json::to_string_pretty(&results)?)?;
     println!("{markdown}");
+    let errors = errors(&results);
+    if !errors.is_empty() {
+        bail!("{} error(s) from the model provider; the report is not a valid evaluation. See {}", errors.len(), out.join("report.md").display());
+    }
     let violations: usize = results.iter().map(|r| r.violations.len()).sum();
     if violations > 0 {
         bail!("{violations} invariant violation(s); see {}", out.join("results.json").display());

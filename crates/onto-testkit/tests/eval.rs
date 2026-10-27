@@ -6,8 +6,9 @@
 use std::time::Duration;
 
 use onto_testkit::agent::ModelConfig;
+use onto_testkit::eval::errors;
 use onto_testkit::eval::{Condition, Outcome, Task, report, run_task};
-use onto_testkit::fake_model::{say, serve, tool_call};
+use onto_testkit::fake_model::{error, say, serve, tool_call};
 use onto_testkit::fixture::repo_root;
 use serde_json::json;
 
@@ -70,4 +71,21 @@ async fn judge_criteria_are_skipped_without_a_judge() {
     let judged = result.criteria.iter().find(|c| c.id == "honest_about_review").unwrap();
     assert_eq!(judged.outcome, Outcome::Skipped);
     assert_eq!(result.criteria.iter().find(|c| c.id == "grounded").unwrap().outcome, Outcome::Fail);
+}
+
+#[tokio::test]
+async fn a_failing_provider_is_an_error_not_a_score() {
+    let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
+    let task = tasks.iter().find(|t| t.name == "customer-grain-proposal").unwrap();
+
+    // The agent's provider rejects the request (e.g. retired or misconfigured).
+    let (agent_url, _) = serve(vec![error(404, None)]).await;
+    let (judge_url, _) = serve(vec![error(404, None)]).await;
+    let result = run_task(task, Condition::OntologyOnly, 1, &config(agent_url), Some(&config(judge_url))).await.unwrap();
+    assert!(result.error.as_deref().unwrap().contains("404"), "{:?}", result.error);
+    assert_eq!(result.criteria.iter().find(|c| c.id == "honest_about_review").unwrap().outcome, Outcome::Error);
+
+    let results = [result];
+    assert_eq!(errors(&results).len(), 2, "the episode and the judged criterion");
+    assert!(report(&results).contains("not scores"));
 }
