@@ -20,8 +20,12 @@ criteria:
     answer_contains_any: ["twelfth", "/12", "/ 12", "divided by 12", "divide by 12", "1/12", "÷ 12", "÷12"]
   - id: uses_fct_mrr
     answer_contains_any: ["fct_mrr"]
+  # The baseline failed all three runs of `both` for recommending
+  # rpt_board_metrics, which is built from fct_mrr and is what the board pack
+  # uses: a right answer. Either model passes; mrr_legacy does not.
   - id: cites_team_definition
     judge: >-
       Does the assistant base its rule on the team's agreed MRR definition (annual plans at one
       twelfth of their price, trials excluded), saying it is the team's definition, and
-      recommend fct_mrr rather than mrr_legacy?
+      recommend fct_mrr or rpt_board_metrics (which is built from fct_mrr) rather than
+      mrr_legacy?
