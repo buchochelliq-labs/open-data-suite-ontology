@@ -63,7 +63,14 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Runs Tuva's third-party dbt code in a job without permissions or secrets;
+  # this job only reads the manifest it builds.
+  tuva-fixture:
+    permissions: {}
+    uses: ./.github/workflows/tuva-fixture.yml
+
   eval:
+    needs: tuva-fixture
     runs-on: ubuntu-latest
     # Provider keys (e.g. GEMINI_API_KEY) are secrets of the `ai` environment,
     # which only jobs that name it can read.
@@ -71,6 +78,10 @@ jobs:
     timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: tuva-manifest
+          path: fixtures/tuva/target
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5

@@ -24,8 +24,12 @@ The manifest is not committed. `build.sh` clones Tuva at a pinned commit,
 installs dbt with DuckDB and runs `dbt parse` on Tuva's integration project
 (core package only), then copies `manifest.json` into `target/`.
 
-This runs Tuva's dbt code (its macros and its dbt_utils dependency). Run it
-in a sandbox, such as a CI job without secrets, not on a machine with
+This runs Tuva's dbt code (its macros and its dbt_utils dependency), so it
+runs in its own job: `.github/workflows/tuva-fixture.yml`. That job has no
+permissions, no environment and no secrets. It caches the manifest until
+`build.sh` changes and uploads it as the `tuva-manifest` artifact. CI and the
+evaluation workflow call it and download the manifest into `target/` before
+their tests. To build it yourself, do it in a sandbox, not on a machine with
 credentials:
 
 ```sh

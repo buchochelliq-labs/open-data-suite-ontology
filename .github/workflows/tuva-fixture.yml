@@ -1,0 +1,47 @@
+name: Tuva fixture
+
+# Builds the Tuva fixture's dbt manifest (fixtures/tuva/build.sh) and uploads
+# it as the `tuva-manifest` artifact. CI and the evaluation call this as a
+# separate job and download the artifact.
+#
+# build.sh runs third-party code: Tuva's dbt project and its dbt_utils
+# dependency. So this job has no permissions, no environment and no secrets,
+# and its checkout keeps no credentials. Jobs that hold secrets only read the
+# resulting manifest, which is data.
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions: {}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # The build is pinned (Tuva commit and dbt version in build.sh), so the
+      # manifest is reused until build.sh changes.
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: fixtures/tuva/target/manifest.json
+          key: tuva-manifest-${{ hashFiles('fixtures/tuva/build.sh') }}
+      - uses: actions/setup-python@v5
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          python-version: "3.12"
+      - name: Build the manifest
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: fixtures/tuva/build.sh
+        env:
+          TUVA_BUILD_DIR: ${{ runner.temp }}/tuva
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tuva-manifest
+          path: fixtures/tuva/target/manifest.json
+          if-no-files-found: error
+          retention-days: 7

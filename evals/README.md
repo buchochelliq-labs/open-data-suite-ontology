@@ -112,8 +112,9 @@ alone shows. Run them with `--task saas`. Its
 `fixtures/tuva` is the open-source Tuva healthcare data model with a made-up
 team layer (a PMPM definition, claims run-out, a demo data source to exclude,
 and two conflicting definitions of a high-cost member). Its manifest is built
-by `fixtures/tuva/build.sh`, which runs Tuva's dbt code, so run it in a
-sandbox; until it is built, the four `tuva-*` tasks are reported as not run.
+by `fixtures/tuva/build.sh`, which runs Tuva's dbt code. The workflows build
+it in a separate job without permissions or secrets and download it. Locally,
+until it is built, the four `tuva-*` tasks are reported as not run.
 See its [README](../fixtures/tuva/README.md).
 
 ### A fixture from a real project
