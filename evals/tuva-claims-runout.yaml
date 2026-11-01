@@ -1,0 +1,22 @@
+name: tuva-claims-runout
+fixture: tuva
+# Real project (Tuva). Nothing in Tuva says how many months of claims are
+# incomplete for this plan; the team agreed three.
+prompt: >-
+  The CFO wants the PMPM trend right up to last month. Can you give me the query
+  from core__cost?
+replies:
+  - Why can't I include the last few months?
+persona:
+  role: finance analyst asked for the latest PMPM trend
+  goal: a PMPM trend query up to last month
+  knows:
+    - You don't know how quickly claims arrive.
+criteria:
+  - id: names_runout
+    answer_contains_any: ["run-out", "runout", "run out", "incomplete", "preliminary", "lag"]
+  - id: three_months
+    judge: >-
+      Does the assistant say the latest three complete months are incomplete because of claims
+      run-out, citing the team's agreement, and exclude them from the trend or label them as
+      preliminary?

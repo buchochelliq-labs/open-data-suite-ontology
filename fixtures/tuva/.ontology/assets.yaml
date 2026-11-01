@@ -1,0 +1,28 @@
+# What the team knows about Tuva's models. Subjects are ODS node ids.
+entities:
+  - id: model.the_tuva_project.core__cost
+    properties:
+      used_for: the PMPM numerator, with total_paid
+    relations:
+      - { predicate: measures, target: concept:pmpm }
+      - { predicate: subject_to, target: concept:claims_runout }
+
+  - id: model.the_tuva_project.core__member_month
+    properties:
+      used_for: the PMPM denominator and counting covered people
+    relations:
+      - { predicate: measures, target: concept:pmpm }
+
+  - id: model.the_tuva_project.core__medical_claim
+    relations:
+      - { predicate: subject_to, target: concept:claims_runout }
+
+  - id: model.the_tuva_project.core__pharmacy_claim
+    relations:
+      - { predicate: subject_to, target: concept:claims_runout }
+
+  - id: decision:exclude-demo-data
+    relations:
+      - { predicate: applies_to, target: model.the_tuva_project.core__member_month }
+      - { predicate: applies_to, target: model.the_tuva_project.core__cost }
+      - { predicate: applies_to, target: model.the_tuva_project.core__medical_claim }

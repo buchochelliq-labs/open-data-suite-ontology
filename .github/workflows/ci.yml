@@ -10,10 +10,20 @@ env:
   RUSTFLAGS: -D warnings
 
 jobs:
+  # Runs Tuva's third-party dbt code in a job without permissions; see the workflow.
+  tuva-fixture:
+    permissions: {}
+    uses: ./.github/workflows/tuva-fixture.yml
+
   check:
+    needs: tuva-fixture
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: tuva-manifest
+          path: fixtures/tuva/target
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy

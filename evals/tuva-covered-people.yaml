@@ -1,0 +1,20 @@
+name: tuva-covered-people
+fixture: tuva
+# Real project (Tuva). Counting people by person_id may follow from Tuva's
+# docs; excluding the demo data source is the team's decision alone.
+prompt: How many people did we cover in 2026, by payer?
+replies:
+  - Anything I should filter out?
+persona:
+  role: operations analyst at a health plan
+  goal: a count of covered people by payer for 2026
+  knows:
+    - The plan uses the Tuva Project.
+    - You have heard there is some training data in the warehouse but don't know where.
+criteria:
+  - id: excludes_demo
+    answer_contains_any: ["medicare_lds_demo"]
+  - id: people_not_members
+    judge: >-
+      Does the assistant count distinct person_id (not member_id) from member months, and exclude
+      the demo data source (medicare_lds_demo) as the team decided?
