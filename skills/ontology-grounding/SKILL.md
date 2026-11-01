@@ -55,7 +55,9 @@ relationships are business assertions, not lineage or foreign keys.
 
 When the user states a reusable fact, offer to record it; a conversational
 answer is not permission. With permission, call `ontology_propose` with a
-precise subject, predicate, object and a rationale citing the user. Use a
+precise subject, predicate, object and a rationale citing the user by name or
+role, never by email or other contact details (accepted proposals are
+committed). Use a
 declared predicate (e.g. `grain`, `rule`, `known_issue`, `onto:definition`):
 if the proposal comes back with a warning, prepare it again with a suggested
 predicate, or say in the rationale why a new one is needed. Record a rule
