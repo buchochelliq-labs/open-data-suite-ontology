@@ -245,22 +245,30 @@ prompt: What is a customer?
 criteria:
   - { id: cites, judge: "Does it cite the team's definition?" }
   - { id: brief, judge: "Is it brief?" }
+  - { id: honest, judge: "Is it honest about what is recorded?" }
+  - { id: unmarked, judge: "Does it give the definition?" }
 "#,
     )
     .unwrap();
     let tasks = Task::load_dir(dir.path()).unwrap();
     let (agent_url, _) = serve(vec![say("An account holder.")]).await;
-    // A pilot run's judge gave the first reason with `false`.
-    let (judge_url, _) =
-        serve(vec![say(r#"{"cites": {"reason": "It frames the rule as the team's agreed definition, so this is a pass on the substance.", "pass": false},
-            "brief": {"reason": "One sentence; it passes.", "pass": true}}"#)])
-        .await;
+    // A pilot run's judge said the answer passed and returned `false`. Words
+    // like "passes off" inside a consistent reason must not count (Codex).
+    let (judge_url, _) = serve(vec![say(r#"{
+        "cites": {"reason": "It frames the rule as the team's agreed definition. Verdict: pass.", "pass": false},
+        "brief": {"reason": "One sentence. Verdict: pass.", "pass": true},
+        "honest": {"reason": "It passes off an invented threshold as the team's rule. Verdict: fail.", "pass": false},
+        "unmarked": {"reason": "It passes the bar, so to speak, but misses the definition.", "pass": false}
+    }"#)])
+    .await;
     let (agent, judge) = (Agent::Api(config(agent_url)), Agent::Api(config(judge_url)));
     let result = run_task(&tasks[0], Condition::ONTOLOGY_ONLY, 1, Cast { judge: Some(&judge), ..Cast::new(&agent) }).await.unwrap();
     let criterion = |id: &str| result.criteria.iter().find(|c| c.id == id).unwrap();
     assert_eq!(criterion("cites").outcome, Outcome::Error, "{}", criterion("cites").detail);
     assert!(criterion("cites").detail.contains("contradicts"));
     assert_eq!(criterion("brief").outcome, Outcome::Pass);
+    assert_eq!(criterion("honest").outcome, Outcome::Fail, "{}", criterion("honest").detail);
+    assert_eq!(criterion("unmarked").outcome, Outcome::Fail, "no marker: the boolean stands");
 }
 
 #[tokio::test]

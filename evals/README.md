@@ -234,7 +234,8 @@ cheap:
   person on Haiku (`ONTO_HUMAN_MODEL`) and the judge on Sonnet
   (`ONTO_JUDGE_MODEL`): the judge decides the scores, and on Haiku it once gave
   a verdict its own reason contradicted. The judge writes its reason before its
-  verdict, and a verdict its reason contradicts is reported as an error, not a
+  verdict, ending it with `Verdict: pass.` or `Verdict: fail.`; when that
+  disagrees with the boolean, the criterion is reported as an error, not a
   score. `judge: false` skips them entirely.
 - **Use the free `local` provider for routine runs**, and Claude for a final check.
 
