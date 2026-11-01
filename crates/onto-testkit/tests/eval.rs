@@ -251,11 +251,10 @@ criteria:
     let tasks = Task::load_dir(dir.path()).unwrap();
     let (agent_url, _) = serve(vec![say("An account holder.")]).await;
     // A pilot run's judge gave the first reason with `false`.
-    let (judge_url, _) = serve(vec![say(
-        r#"{"cites": {"reason": "It frames the rule as the team's agreed definition, so this is a pass on the substance.", "pass": false},
-            "brief": {"reason": "One sentence; it passes.", "pass": true}}"#,
-    )])
-    .await;
+    let (judge_url, _) =
+        serve(vec![say(r#"{"cites": {"reason": "It frames the rule as the team's agreed definition, so this is a pass on the substance.", "pass": false},
+            "brief": {"reason": "One sentence; it passes.", "pass": true}}"#)])
+        .await;
     let (agent, judge) = (Agent::Api(config(agent_url)), Agent::Api(config(judge_url)));
     let result = run_task(&tasks[0], Condition::ONTOLOGY_ONLY, 1, Cast { judge: Some(&judge), ..Cast::new(&agent) }).await.unwrap();
     let criterion = |id: &str| result.criteria.iter().find(|c| c.id == id).unwrap();
