@@ -5,10 +5,10 @@
 //! [`accept`] is the only path that writes, and it is invoked by a person
 //! (`onto proposals accept <digest>`), never by an agent-facing tool.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use onto_core::digest::canonical_digest;
-use onto_core::{Authority, Claim, Layer, Object, Property, Provenance, Record, Validity};
+use onto_core::{Authority, Claim, Layer, Object, Property, Provenance, Record, Validity, vocab};
 use onto_store::{ProposalStatus, Store, StoredProposal};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -65,6 +65,81 @@ pub struct Proposal {
     pub current: Option<Property>,
     /// What happens next. Preparing a proposal is not approval.
     pub next_step: String,
+    /// Problems the reviewer should see, such as a predicate no schema declares.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+    /// Declared predicates that may fit better than an undeclared one.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub suggested_predicates: Vec<PredicateSuggestion>,
+}
+
+/// A declared predicate offered in place of an undeclared one.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct PredicateSuggestion {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition: Option<String>,
+}
+
+/// What a proposal's predicate means for the shared vocabulary.
+#[derive(Debug, Default)]
+pub struct VocabularyCheck {
+    pub warnings: Vec<String>,
+    pub suggestions: Vec<PredicateSuggestion>,
+}
+
+/// Words of `text` for matching: lowercase, without short words and plural `s`.
+fn words(text: &str) -> BTreeSet<String> {
+    const STOP: &[&str] = &["the", "and", "for", "with", "that", "this", "when", "its", "per", "one", "row", "rows"];
+    text.split(|c: char| !c.is_alphanumeric())
+        .map(str::to_lowercase)
+        .filter(|w| w.len() > 2 && !STOP.contains(&w.as_str()))
+        .map(|w| w.strip_suffix('s').filter(|s| s.len() > 2).map(str::to_string).unwrap_or(w))
+        .collect()
+}
+
+/// Check a proposal's predicate against the declared vocabulary: every
+/// predicate typed `onto:Predicate` in a loaded schema, plus the reserved
+/// `onto:` ones. An undeclared predicate gets a warning and up to three
+/// declared predicates whose id, label or definition share words with the
+/// proposed predicate's name. In a pilot run, one rule was recorded under a different invented
+/// predicate in each run (#29).
+pub fn check_vocabulary(store: &Store, request: &ProposalRequest) -> Result<VocabularyCheck> {
+    let predicate = request.predicate.as_str();
+    let declared: BTreeSet<String> = store
+        .records_with_predicate(vocab::TYPE)?
+        .into_iter()
+        .filter(|r| r.claim.object.entity() == Some(vocab::PREDICATE_TYPE))
+        .map(|r| r.claim.subject)
+        .collect();
+    if predicate.starts_with("onto:") || declared.contains(predicate) {
+        return Ok(VocabularyCheck::default());
+    }
+    // Only the predicate's own words: the value's words (model names, columns)
+    // matched unrelated predicates and suggested them with confidence.
+    let wanted = words(predicate);
+    let mut scored = Vec::new();
+    for id in &declared {
+        let records = store.records_about(id)?;
+        let text = |p: &str| records.iter().find(|r| r.claim.predicate == p).and_then(|r| r.claim.object.as_text().map(str::to_string));
+        let (label, definition) = (text(vocab::LABEL), text(vocab::DEFINITION));
+        let theirs: BTreeSet<String> =
+            words(id).into_iter().chain(label.iter().flat_map(|l| words(l))).chain(definition.iter().flat_map(|d| words(d))).collect();
+        let score = wanted.intersection(&theirs).count();
+        if score > 0 {
+            scored.push((score, id.clone(), definition));
+        }
+    }
+    scored.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+    let suggestions: Vec<PredicateSuggestion> = scored.into_iter().take(3).map(|(_, id, definition)| PredicateSuggestion { id, definition }).collect();
+    let mut warning = format!("`{predicate}` is not declared in any loaded schema. Prefer a declared predicate");
+    if suggestions.is_empty() {
+        warning.push_str("; if none fits, say in the rationale why a new one is needed.");
+    } else {
+        let ids: Vec<&str> = suggestions.iter().map(|s| s.id.as_str()).collect();
+        warning.push_str(&format!(" (closest: {}); if none fits, say in the rationale why a new one is needed.", ids.join(", ")));
+    }
+    Ok(VocabularyCheck { warnings: vec![warning], suggestions })
 }
 
 fn invalid(message: impl Into<String>) -> WorkspaceError {
@@ -123,6 +198,7 @@ pub fn prepare(workspace: &Workspace, store: &Store, request: ProposalRequest, a
         })?;
     }
 
+    let vocabulary = check_vocabulary(store, &request)?;
     let target_file = dir.join(ACCEPTED_FILE);
     Ok(Proposal {
         digest: digest.clone(),
@@ -133,6 +209,8 @@ pub fn prepare(workspace: &Workspace, store: &Store, request: ProposalRequest, a
         current,
         next_step: format!("Pending human review. A person must run `onto proposals accept {digest}`; do not describe this as saved."),
         request,
+        warnings: vocabulary.warnings,
+        suggested_predicates: vocabulary.suggestions,
     })
 }
 

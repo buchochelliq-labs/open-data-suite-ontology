@@ -70,3 +70,38 @@ fn pending_proposals_are_listed_even_for_definitions() {
     assert!(text.contains("pending proposal, not a fact: definition = A person with at least one account."), "{text}");
     assert!(text.contains("1 proposal(s) await review"), "{text}");
 }
+
+/// #29: a proposal under a predicate no schema declares is flagged, with the
+/// declared predicates that fit; a declared one is not.
+#[test]
+fn proposals_point_to_the_declared_vocabulary() {
+    use onto_workspace::proposals::check_vocabulary;
+    let fixture = Fixture::new("shop").unwrap();
+    let workspace = fixture.workspace().unwrap();
+    let store = workspace.open_store().unwrap();
+    let request = |predicate: &str| ProposalRequest {
+        subject: "concept:customer".into(),
+        predicate: predicate.into(),
+        object: Object::Literal("An account is at risk when its health score is below 40.".into()),
+        qualifiers: Default::default(),
+        valid: Default::default(),
+        rationale: "Stated by the owner.".into(),
+    };
+    // The predicates a pilot run invented for one rule.
+    for invented in ["at_risk_threshold", "business_rule"] {
+        let check = check_vocabulary(&store, &request(invented)).unwrap();
+        assert!(check.warnings[0].contains("not declared in any loaded schema"), "{:?}", check.warnings);
+        assert_eq!(check.suggestions.first().map(|s| s.id.as_str()), Some("rule"), "{invented}: {:?}", check.suggestions);
+    }
+    // Nothing declared fits: no suggestion rather than a misleading one.
+    let check = check_vocabulary(&store, &request("date_field")).unwrap();
+    assert_eq!(check.warnings.len(), 1);
+    assert!(check.suggestions.is_empty(), "{:?}", check.suggestions);
+    for declared in ["rule", "grain", "onto:definition"] {
+        let check = check_vocabulary(&store, &request(declared)).unwrap();
+        assert!(check.warnings.is_empty() && check.suggestions.is_empty(), "{declared}");
+    }
+    // The warning reaches the reviewer and the agent with the proposal.
+    let proposal = prepare(&workspace, &store, request("at_risk_threshold"), None).unwrap();
+    assert_eq!(proposal.suggested_predicates[0].id, "rule");
+}

@@ -223,6 +223,9 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         serde_json::to_string(&request.object)?,
                         request.rationale
                     );
+                    for warning in proposals::check_vocabulary(&store, &request)?.warnings {
+                        println!("  warning: {warning}");
+                    }
                 }
             }
             ProposalAction::Accept { digest, by } => {

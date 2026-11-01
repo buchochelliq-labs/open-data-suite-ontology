@@ -91,3 +91,37 @@ predicates:
     definition: A key relationship between assets (ODS ERD), qualified with columns, cardinality and basis. Not lineage.
     cardinality: many
     range: DataAsset
+
+  # Predicates teams use for business meaning. Declared so proposals can reuse
+  # them instead of inventing near-duplicates (#29).
+  - id: rule
+    label: rule
+    definition: >-
+      A business rule that applies to the subject, such as a threshold, a filter
+      or an exclusion, stated in words. Qualify with `threshold`, `operator` or
+      `column` when useful.
+    cardinality: many
+    range: literal
+  - id: known_issue
+    label: known issue
+    definition: A known defect or limitation of the subject that affects its results, with a ticket where there is one.
+    cardinality: many
+    range: literal
+  - id: measures
+    label: measures
+    definition: An asset or concept that quantifies a business concept.
+    cardinality: many
+    range: BusinessConcept
+  - id: measured_by
+    label: measured by
+    definition: The measure that quantifies a business concept (the inverse of `measures`).
+    cardinality: many
+    range: BusinessConcept
+  - id: refines
+    label: refines
+    definition: A narrower concept, standard or decision that builds on a broader one.
+    cardinality: many
+  - id: derived_from
+    label: derived from
+    definition: A concept or measure computed from another.
+    cardinality: many
