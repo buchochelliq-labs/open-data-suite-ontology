@@ -29,9 +29,9 @@ followup:
     goal: know which accounts count as at risk
     knows:
       - You have never used customer_health_scores.
+  # A keyword check on "below 40" passed an answer that only offered 40 as an
+  # example cut-off, so the judge alone decides.
   criteria:
-    - id: knows_threshold
-      answer_contains_any: ["below 40", "under 40", "< 40", "<40", "less than 40"]
     - id: cites_record
       judge: >-
         Does the assistant give the at-risk threshold (health_score below 40) as something the

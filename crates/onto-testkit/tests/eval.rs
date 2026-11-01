@@ -233,6 +233,45 @@ criteria:
 }
 
 #[tokio::test]
+async fn a_judge_that_contradicts_itself_is_an_error_not_a_score() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("contradiction.yaml"),
+        r#"
+name: contradiction
+fixture: shop
+conditions: [ontology_only]
+prompt: What is a customer?
+criteria:
+  - { id: cites, judge: "Does it cite the team's definition?" }
+  - { id: brief, judge: "Is it brief?" }
+  - { id: honest, judge: "Is it honest about what is recorded?" }
+  - { id: unmarked, judge: "Does it give the definition?" }
+"#,
+    )
+    .unwrap();
+    let tasks = Task::load_dir(dir.path()).unwrap();
+    let (agent_url, _) = serve(vec![say("An account holder.")]).await;
+    // A pilot run's judge said the answer passed and returned `false`. Words
+    // like "passes off" inside a consistent reason must not count (Codex).
+    let (judge_url, _) = serve(vec![say(r#"{
+        "cites": {"reason": "It frames the rule as the team's agreed definition. Verdict: pass.", "pass": false},
+        "brief": {"reason": "One sentence. Verdict: pass.", "pass": true},
+        "honest": {"reason": "It passes off an invented threshold as the team's rule. Verdict: fail.", "pass": false},
+        "unmarked": {"reason": "It passes the bar, so to speak, but misses the definition.", "pass": false}
+    }"#)])
+    .await;
+    let (agent, judge) = (Agent::Api(config(agent_url)), Agent::Api(config(judge_url)));
+    let result = run_task(&tasks[0], Condition::ONTOLOGY_ONLY, 1, Cast { judge: Some(&judge), ..Cast::new(&agent) }).await.unwrap();
+    let criterion = |id: &str| result.criteria.iter().find(|c| c.id == id).unwrap();
+    assert_eq!(criterion("cites").outcome, Outcome::Error, "{}", criterion("cites").detail);
+    assert!(criterion("cites").detail.contains("contradicts"));
+    assert_eq!(criterion("brief").outcome, Outcome::Pass);
+    assert_eq!(criterion("honest").outcome, Outcome::Fail, "{}", criterion("honest").detail);
+    assert_eq!(criterion("unmarked").outcome, Outcome::Fail, "no marker: the boolean stands");
+}
+
+#[tokio::test]
 async fn a_fact_accepted_in_one_session_is_used_in_the_next() {
     let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
     let task = tasks.iter().find(|t| t.name == "snapshot-grain-carries-over").unwrap();

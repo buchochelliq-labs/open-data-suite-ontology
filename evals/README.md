@@ -240,9 +240,13 @@ cheap:
   task).
 - **Helpers are cheap.** The judge answers all of a conversation's questions
   in one request. For Claude Code the judge and the simulated person replace
-  Claude Code's own system prompt instead of loading it, and the workflow runs
-  them on Haiku (`ONTO_JUDGE_MODEL`, `ONTO_HUMAN_MODEL`). `judge: false`
-  skips them entirely.
+  Claude Code's own system prompt instead of loading it. The workflow runs the
+  person on Haiku (`ONTO_HUMAN_MODEL`) and the judge on Sonnet
+  (`ONTO_JUDGE_MODEL`): the judge decides the scores, and on Haiku it once gave
+  a verdict its own reason contradicted. The judge writes its reason before its
+  verdict, ending it with `Verdict: pass.` or `Verdict: fail.`; when that
+  disagrees with the boolean, the criterion is reported as an error, not a
+  score. `judge: false` skips them entirely.
 - **Use the free `local` provider for routine runs**, and Claude for a final check.
 
 Agents themselves spend fewer tokens because the ontology's answers are
