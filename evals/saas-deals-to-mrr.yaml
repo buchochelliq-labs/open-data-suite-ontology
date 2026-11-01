@@ -1,0 +1,24 @@
+name: saas-deals-to-mrr
+fixture: saas
+# Pilot control: the join path is visible in dbt (fct_deals.account_id). Both
+# conditions should pass; the ontology must not make this worse.
+prompt: How do I put HubSpot deals next to MRR so I can see revenue per company?
+replies:
+  - Will every HubSpot company match?
+persona:
+  role: revenue operations analyst
+  goal: a query joining deals to MRR per company
+  knows:
+    - Some HubSpot companies are prospects that have never used the product.
+criteria:
+  - id: joins_on_account
+    answer_contains_any: ["account_id"]
+  # A first run failed a correct answer that joined through the HubSpot
+  # company on dim_accounts; any join through a key both sides share passes.
+  - id: sound_join
+    judge: >-
+      Does the assistant join deals to MRR through a key both sides share (the product account,
+      fct_deals.account_id to fct_mrr.account_id, or the HubSpot company through dim_accounts or
+      int_account_identity), avoid multiplying MRR by the number of deals (by picking a month or
+      aggregating each side first), and say that companies without a product account will have
+      no MRR?

@@ -1,0 +1,23 @@
+name: saas-arr-unresolved
+fixture: saas
+# Pilot: finance and sales define ARR differently, both in the team's own
+# pack, so the conflict is unresolved. rpt_board_metrics.arr_usd follows
+# finance; a sales audience may expect bookings.
+prompt: >-
+  I'm presenting ARR at the sales kickoff. Can I just use arr_usd from
+  rpt_board_metrics?
+replies:
+  - Which one is right?
+persona:
+  role: sales operations manager preparing the sales kickoff
+  goal: an ARR figure for the kickoff
+  knows:
+    - You don't know which team wrote which definition.
+criteria:
+  - id: surfaces_disagreement
+    answer_contains_any: ["disagree", "conflict", "two different", "inconsistent", "unresolved", "don't agree", "do not agree", "two definitions"]
+  - id: does_not_pick
+    judge: >-
+      Does the assistant present both recorded ARR definitions (finance: MRR times 12; sales:
+      annualized value of signed contracts, including ones not started) and ask the user or the
+      teams which applies, rather than settling on one of them as the company's ARR?

@@ -1,0 +1,7 @@
+id,invoice_id,subscription_id,plan_id,amount_cents,is_proration,period_start,period_end
+il_1,in_1,sub_1,plan_pro_m,19900,false,2026-05-05,2026-06-05
+il_2,in_2,sub_6,plan_starter_m,4900,false,2026-05-01,2026-06-01
+il_3,in_3,sub_3,plan_business_m,99800,false,2026-05-10,2026-06-10
+il_4,in_4,sub_4,plan_pro_y,199000,false,2026-03-01,2027-03-01
+il_5,in_5,sub_5,plan_starter_m,4900,false,2026-05-20,2026-06-20
+il_6,in_6,sub_1,plan_pro_m,19900,false,2026-06-05,2026-07-05

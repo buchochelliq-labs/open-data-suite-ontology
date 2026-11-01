@@ -1,0 +1,7 @@
+logs/
+dbt_packages/
+*.duckdb
+target/*
+!target/manifest.json
+!target/catalog.json
+.venv/

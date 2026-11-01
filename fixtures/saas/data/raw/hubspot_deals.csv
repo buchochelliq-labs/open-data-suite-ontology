@@ -1,0 +1,7 @@
+id,company_id,deal_stage,amount,close_date,pipeline
+d_1,hc_1,closedwon,2388,2026-01-05,new_business
+d_2,hc_3,closedwon,11976,2026-02-10,new_business
+d_3,hc_4,closedwon,1990,2026-03-01,new_business
+d_4,hc_6,contractsent,24000,2026-07-15,new_business
+d_5,hc_1,closedwon,23880,2026-08-01,expansion
+d_6,hc_2,closedlost,2388,2026-04-20,renewal

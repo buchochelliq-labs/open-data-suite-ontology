@@ -1,0 +1,13 @@
+version: 2
+sources:
+  - name: stripe
+    description: Stripe billing data, loaded hourly by the ELT tool.
+    schema: raw
+    tables:
+      - name: stripe_customers
+      - name: stripe_plans
+      - name: stripe_subscriptions
+      - name: stripe_invoices
+      - name: stripe_invoice_lines
+      - name: stripe_charges
+      - name: stripe_refunds

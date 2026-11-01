@@ -1,0 +1,22 @@
+name: saas-dau-definition
+fixture: saas
+# Pilot: a multi-hop mismatch. fct_daily_active_users measures DAU, DAU counts
+# active users, and an active user needs a core action (not a login) and is not
+# internal. The model's own description says it counts any event.
+prompt: Can I take DAU for the investor update straight from fct_daily_active_users?
+replies:
+  - What would I need to change?
+persona:
+  role: product analyst preparing the investor update
+  goal: a DAU figure that matches the company's definition
+  knows:
+    - You assumed the model already follows the company definition.
+criteria:
+  - id: mentions_core_actions
+    answer_contains_any: ["core action", "login", "log in", "logging in"]
+  - id: raises_mismatch
+    judge: >-
+      Does the assistant warn that fct_daily_active_users counts users with any event
+      (including logins and internal accounts' users), while the team's definition of an active
+      user requires a core action (project_created, report_viewed or query_run) and excludes
+      internal accounts, so the figure would be too high?

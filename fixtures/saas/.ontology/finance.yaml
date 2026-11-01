@@ -1,0 +1,6 @@
+# Finance's ARR definition. sales.yaml has sales', which disagrees; both are in
+# the team's own pack, so neither wins by priority: the agent must show both and ask.
+entities:
+  - id: concept:arr
+    definition: MRR at month end multiplied by 12.
+    rationale: Finance's definition, used in the board pack.

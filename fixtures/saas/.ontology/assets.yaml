@@ -1,0 +1,47 @@
+# What the team knows about the dbt models. Subjects are ODS node ids.
+entities:
+  - id: model.acme.fct_mrr
+    properties:
+      grain: one row per account per calendar month in which the account had MRR, or lost it
+      known_issue: >-
+        A plan change that Stripe records as one subscription cancelled before
+        month end and another started in the next month shows as churn followed
+        by reactivation, instead of contraction or expansion. Ticket DATA-412.
+    relations:
+      - { predicate: represents, target: concept:mrr }
+      - { predicate: represents, target: concept:mrr_movement }
+      - { predicate: owned_by, target: team:finance-data }
+
+  - id: model.acme.dim_accounts
+    definition: >-
+      One row per product account, including free, internal and deleted
+      accounts. Filter to paying customers with has_paid_subscription and not
+      is_internal.
+    relations:
+      - { predicate: represents, target: concept:account }
+
+  - id: model.acme.fct_daily_active_users
+    properties:
+      grain: one row per day
+    relations:
+      - { predicate: measures, target: concept:daily_active_users }
+      - { predicate: owned_by, target: team:product-data }
+
+  - id: model.acme.fct_account_activity_weekly
+    properties:
+      grain: one row per account per ISO week (weeks start on Monday)
+
+  - id: model.acme.rpt_board_metrics
+    definition: The monthly figures the board pack is built from.
+    properties:
+      grain: one row per calendar month
+    relations:
+      - { predicate: owned_by, target: team:finance-data }
+      - { predicate: measures, target: concept:mrr }
+      - { predicate: measures, target: concept:arr }
+
+  - id: model.acme.int_account_identity
+    properties:
+      grain: one row per product account
+    relations:
+      - { predicate: represents, target: concept:account }

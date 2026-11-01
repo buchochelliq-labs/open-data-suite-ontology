@@ -1,0 +1,10 @@
+version: 2
+sources:
+  - name: app
+    description: Replica of the product's Postgres database.
+    schema: raw
+    tables:
+      - name: app_accounts
+      - name: app_workspaces
+      - name: app_users
+      - name: app_events

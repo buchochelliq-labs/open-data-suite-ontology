@@ -1,0 +1,9 @@
+id,name,plan_tier,is_internal,created_at,deleted_at
+101,Northwind,pro,false,2026-01-04 18:00:00,
+102,Globex,starter,false,2026-01-10 12:00:00,
+103,Initech,business,false,2026-02-09 09:30:00,
+104,Umbrella,pro,false,2026-02-27 15:00:00,
+105,Hooli,starter,false,2026-01-19 10:00:00,
+106,Acme Internal,business,true,2026-01-01 00:00:00,
+107,Pied Piper,free,false,2026-04-02 08:00:00,
+108,Vandelay,free,false,2026-03-15 11:00:00,2026-05-01 00:00:00

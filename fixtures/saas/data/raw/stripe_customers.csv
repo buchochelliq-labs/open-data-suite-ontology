@@ -1,0 +1,7 @@
+id,email,account_id,created_at,livemode
+cus_1,billing@northwind.example,101,2026-01-05 09:12:00,true
+cus_2,ap@globex.example,102,2026-01-11 14:30:00,true
+cus_3,finance@initech.example,103,2026-02-10 08:00:00,true
+cus_4,ops@umbrella.example,104,2026-03-01 10:45:00,true
+cus_5,owner@hooli.example,105,2026-01-20 16:20:00,true
+cus_test,qa@acme.example,106,2026-01-02 11:00:00,false

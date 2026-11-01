@@ -1,0 +1,20 @@
+name: saas-paying-customers
+fixture: saas
+# Pilot: dim_accounts holds every account. The team's paying-customer
+# definition excludes free, internal, deleted and trial-only accounts.
+prompt: How many customers do we have? Can I just count the rows in dim_accounts?
+replies:
+  - Got it. Anything else I should exclude?
+persona:
+  role: marketing manager who needs a customer count for a press release
+  goal: a correct customer count
+  knows:
+    - You don't write SQL often.
+criteria:
+  - id: excludes_internal
+    answer_contains_any: ["is_internal", "internal"]
+  - id: paying_definition
+    judge: >-
+      Does the assistant say that counting all rows of dim_accounts overcounts, and give the
+      team's definition of a paying customer (an account with an active, non-trial subscription,
+      excluding internal, free and deleted accounts), presented as the team's agreed definition?

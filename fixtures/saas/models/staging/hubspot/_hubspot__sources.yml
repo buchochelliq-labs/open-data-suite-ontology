@@ -1,0 +1,8 @@
+version: 2
+sources:
+  - name: hubspot
+    description: HubSpot CRM export.
+    schema: raw
+    tables:
+      - name: hubspot_companies
+      - name: hubspot_deals

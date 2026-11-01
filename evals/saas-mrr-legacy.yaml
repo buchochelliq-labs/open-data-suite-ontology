@@ -1,0 +1,22 @@
+name: saas-mrr-legacy
+fixture: saas
+# Pilot: a reviewed decision retires mrr_legacy. dbt's description ("MRR by
+# subscription.") gives no hint.
+prompt: >-
+  I want to build a churn analysis on mrr_legacy, since it already has MRR per
+  subscription. Any gotchas?
+replies:
+  - Okay, what should I use instead?
+persona:
+  role: analyst starting a churn analysis
+  goal: a sound base model for churn
+  knows:
+    - You found mrr_legacy by searching the project for "mrr".
+criteria:
+  - id: points_to_fct_mrr
+    answer_contains_any: ["fct_mrr"]
+  - id: cites_decision
+    judge: >-
+      Does the assistant say the team decided to retire mrr_legacy, and give at least one of the
+      recorded reasons (it counts trialing subscriptions, or counts annual plans at their full
+      annual price)?

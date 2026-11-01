@@ -1,0 +1,27 @@
+name: saas-mrr-annual-plans
+fixture: saas
+# Pilot: a paraphrased MRR question. The team's MRR definition (annual plans
+# at one twelfth, trials excluded) and the decision to retire mrr_legacy are in
+# the ontology; mrr_legacy looks like the obvious answer to someone reading dbt.
+prompt: >-
+  For the board deck I need our monthly subscription revenue. One customer pays
+  yearly, so do I count their whole payment in the month they paid? Which model
+  should I use?
+replies:
+  - What about customers who are still on a trial?
+persona:
+  role: finance analyst preparing the board deck
+  goal: the right model and rule for monthly subscription revenue
+  knows:
+    - You have seen a model called mrr_legacy in an old dashboard.
+    - Umbrella pays for the Pro plan yearly.
+criteria:
+  - id: annual_normalized
+    answer_contains_any: ["twelfth", "/12", "/ 12", "divided by 12", "divide by 12", "1/12", "÷ 12", "÷12"]
+  - id: uses_fct_mrr
+    answer_contains_any: ["fct_mrr"]
+  - id: cites_team_definition
+    judge: >-
+      Does the assistant base its rule on the team's agreed MRR definition (annual plans at one
+      twelfth of their price, trials excluded), saying it is the team's definition, and
+      recommend fct_mrr rather than mrr_legacy?

@@ -1,0 +1,88 @@
+# What the finance, product and sales teams agreed. Phrased in the teams' own
+# words, so questions phrased differently need exploration.
+entities:
+  - id: concept:account
+    type: BusinessConcept
+    label: Account
+    definition: >-
+      The company that signs up and pays. The unit for customers, MRR and churn.
+      A workspace is not an account: an account can have several workspaces.
+      Stripe customers and HubSpot companies map to accounts (Stripe through the
+      customer's account_id metadata, HubSpot through app_account_id).
+    rationale: Agreed in the 2026 metrics review.
+
+  - id: concept:paying_customer
+    type: BusinessConcept
+    label: Paying customer
+    definition: >-
+      An account with at least one active, non-trial subscription at month end.
+      Internal and test accounts (is_internal) never count, and nor do free or
+      deleted accounts.
+    rationale: Agreed in the 2026 metrics review.
+    relations:
+      - { predicate: refines, target: concept:account }
+
+  - id: concept:mrr
+    type: BusinessConcept
+    label: Monthly recurring revenue (MRR)
+    definition: >-
+      The normalized monthly amount of an account's paid subscriptions active at
+      month end, after discounts. Annual plans count at one twelfth of their
+      price. Trials, one-off charges, refunds and taxes are excluded.
+    rationale: Agreed with finance in the 2026 planning review.
+    relations:
+      - { predicate: measures, target: concept:account }
+
+  - id: concept:mrr_movement
+    type: BusinessConcept
+    label: MRR movement
+    definition: >-
+      Each month's MRR change per account is one of: new (first paid month),
+      expansion, contraction, churn, reactivation. Churn means MRR went to zero.
+      A downgrade, including a plan change that Stripe records as cancelling one
+      subscription and starting another, is contraction, never churn.
+    rationale: Agreed with finance after the April 2026 churn misreport.
+    relations:
+      - { predicate: refines, target: concept:mrr }
+
+  - id: concept:arr
+    type: BusinessConcept
+    label: Annual recurring revenue (ARR)
+    relations:
+      - { predicate: derived_from, target: concept:mrr }
+
+  - id: concept:active_user
+    type: BusinessConcept
+    label: Active user
+    definition: >-
+      A user who performed at least one core action that day: project_created,
+      report_viewed or query_run. Logging in alone does not make a user active.
+      Users of internal accounts are excluded.
+    rationale: Agreed by product in the 2026 engagement review.
+
+  - id: concept:daily_active_users
+    type: BusinessConcept
+    label: Daily active users (DAU)
+    definition: The number of distinct active users on a day.
+    relations:
+      - { predicate: counts, target: concept:active_user }
+
+  - id: standard:money-columns
+    type: ModellingStandard
+    label: Money columns
+    definition: >-
+      Money columns are decimal US dollars named with the _usd suffix. Stripe's
+      integer cents are converted in staging and never downstream.
+    rationale: Agreed in the 2026 modelling guidelines review.
+
+  - id: decision:retire-mrr-legacy
+    type: Decision
+    label: Retire mrr_legacy
+    definition: >-
+      mrr_legacy is retired: use fct_mrr. mrr_legacy has one row per
+      subscription, counts trialing subscriptions, and counts annual plans at
+      their full annual price. It is kept only until the 2025 board deck is
+      archived; build nothing new on it.
+    rationale: Decided by the data team in March 2026.
+    relations:
+      - { predicate: applies_to, target: model.acme.mrr_legacy }
