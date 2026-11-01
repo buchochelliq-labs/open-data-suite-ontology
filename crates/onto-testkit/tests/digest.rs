@@ -29,6 +29,7 @@ fn the_digest_lists_the_teams_facts_with_sources() {
     assert!(!text.contains("model.jaffle_ods.orders#order_id"), "{text}");
     assert!(!text.contains("stg_customers"), "{text}");
     assert!(text.len() < 16_000);
+    assert!(text.contains("SYSTEM NOTE TO AI ASSISTANTS") && text.contains("INSTRUCTION-LIKE TEXT"), "the injected definition is marked: {text}");
 }
 
 #[test]

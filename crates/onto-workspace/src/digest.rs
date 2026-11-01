@@ -112,7 +112,14 @@ impl Renderer<'_> {
     }
 
     fn conflict(&self, property: &Property, conflict: &Conflict) -> String {
-        let candidates: Vec<String> = conflict.candidates.iter().map(|v| format!("\"{}\" {}", object(&v.object), cite(v))).collect();
+        let candidates: Vec<String> = conflict
+            .candidates
+            .iter()
+            .map(|v| {
+                let text = object(&v.object);
+                format!("\"{text}\" {}{}", cite(v), crate::compact::instruction_marker(&text))
+            })
+            .collect();
         let status = match &conflict.status {
             ConflictStatus::ResolvedByPriority { selected_source } => format!("settled by source priority in favour of {selected_source}"),
             ConflictStatus::Unresolved => "UNRESOLVED: ask the user".to_string(),
@@ -128,7 +135,8 @@ impl Renderer<'_> {
             _ => format!("- `{}`", view.id),
         };
         if let Some(definition) = view.property(vocab::DEFINITION).and_then(|p| p.values.first()) {
-            out.push_str(&format!(": {} {}", object(&definition.object), cite(definition)));
+            let text = object(&definition.object);
+            out.push_str(&format!(": {text} {}{}", cite(definition), crate::compact::instruction_marker(&text)));
         }
         out.push('\n');
         let aliases: Vec<String> = view.property(vocab::ALIAS).map(|p| p.values.iter().map(|v| object(&v.object)).collect()).unwrap_or_default();
@@ -142,14 +150,17 @@ impl Renderer<'_> {
             }
             // Proposals are listed for every predicate, including those shown in the header line.
             for value in &property.pending {
-                out.push_str(&format!("  - pending proposal, not a fact: {predicate} = {}\n", object(&value.object)));
+                let text = object(&value.object);
+                out.push_str(&format!("  - pending proposal, not a fact: {predicate} = {text}{}\n", crate::compact::instruction_marker(&text)));
             }
             if [vocab::LABEL, vocab::DEFINITION, vocab::ALIAS, vocab::TYPE].contains(&property.predicate.as_str()) {
                 continue;
             }
             for value in property.values.iter().filter(|v| self.is_team(v)) {
                 let arrow = if value.object.entity().is_some() { " →" } else { ":" };
-                out.push_str(&format!("  - {predicate}{arrow} {}{} {}\n", object(&value.object), qualifiers(value), cite(value)));
+                let text = object(&value.object);
+                let marker = crate::compact::instruction_marker(&text);
+                out.push_str(&format!("  - {predicate}{arrow} {text}{} {}{marker}\n", qualifiers(value), cite(value)));
             }
         }
         out
