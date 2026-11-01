@@ -55,6 +55,10 @@ relationships are business assertions, not lineage or foreign keys.
 
 When the user states a reusable fact, offer to record it; a conversational
 answer is not permission. With permission, call `ontology_propose` with a
-precise subject, predicate, object and a rationale citing the user. Show the
+precise subject, predicate, object and a rationale citing the user. Use a
+declared predicate (e.g. `grain`, `rule`, `known_issue`, `onto:definition`):
+if the proposal comes back with a warning, prepare it again with a suggested
+predicate, or say in the rationale why a new one is needed. Record a rule
+about a model on the model, not on one of its columns. Show the
 digest: it stays pending until a person runs `onto proposals accept <digest>`.
 Never say it was saved. Pending proposals appear as `PENDING`; they are not facts.

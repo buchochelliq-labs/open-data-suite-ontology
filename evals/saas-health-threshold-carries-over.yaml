@@ -16,6 +16,10 @@ persona:
     - An account is at risk when its health_score is below 40.
   accepts_proposals: true
 criteria:
+  # A pilot run recorded this rule under a different invented predicate in
+  # each run (#29); it belongs under the declared `rule`.
+  - id: uses_declared_predicate
+    proposed: { predicate: rule, contains: "40" }
   - id: proposed_threshold
     judge: >-
       Did the assistant prepare an ontology proposal recording that an account is at risk when
