@@ -366,7 +366,9 @@ pub fn render_chat(title: &str, result: &RunResult) -> String {
 }
 
 const JUDGE_SYSTEM: &str = "You grade a conversation between a user and an AI data-modelling assistant. \
-Answer every question. Reply only with JSON mapping each question id to {\"pass\": true|false, \"reason\": \"one sentence\"}.";
+Answer every question. Judge substance, not wording: an answer meets a question when it says what the question asks, \
+in any words. For each question, first write one sentence of reasoning, then decide. Reply only with JSON mapping \
+each question id to {\"reason\": \"one sentence\", \"pass\": true|false}; the verdict must agree with the reason.";
 
 /// One question to a model without tools; returns its text answer and the
 /// tokens used. Used by the judge and by the simulated person.
@@ -382,8 +384,27 @@ pub async fn ask(model: &Agent, system: &str, prompt: &str) -> Result<(String, T
     }
 }
 
+/// The judge's answer to one question.
+struct Verdict {
+    pass: bool,
+    reason: String,
+}
+
+impl Verdict {
+    /// Whether the reason states the opposite outcome to the verdict, as a
+    /// pilot run's judge did ("this is a pass on the substance" with `false`).
+    /// Such a verdict is an error, not a score.
+    fn contradicts_itself(&self) -> bool {
+        let reason = self.reason.to_lowercase();
+        let says = |phrases: &[&str]| phrases.iter().any(|p| reason.contains(p));
+        let says_pass = says(&["is a pass", "so it passes", "this passes", "it passes", "should pass", "pass on the substance"]);
+        let says_fail = says(&["is a fail", "so it fails", "this fails", "it fails", "should fail"]);
+        (self.pass && says_fail && !says_pass) || (!self.pass && says_pass && !says_fail)
+    }
+}
+
 /// Verdicts by criterion id.
-type Verdicts = BTreeMap<String, (bool, String)>;
+type Verdicts = BTreeMap<String, Verdict>;
 
 /// Every judged question about one conversation in a single request.
 async fn judge(judge: &Judge, questions: &[(&str, &str)], transcript: &Transcript) -> Result<(Verdicts, TokenUsage)> {
@@ -393,7 +414,7 @@ async fn judge(judge: &Judge, questions: &[(&str, &str)], transcript: &Transcrip
     let start = text.find('{').context("judge reply has no JSON")?;
     let end = text.rfind('}').context("judge reply has no JSON")?;
     let reply: Value = serde_json::from_str(&text[start..=end]).context("judge reply is not JSON")?;
-    let verdict = |v: &Value| (v["pass"].as_bool().unwrap_or(false), v["reason"].as_str().unwrap_or_default().to_string());
+    let verdict = |v: &Value| Verdict { pass: v["pass"].as_bool().unwrap_or(false), reason: v["reason"].as_str().unwrap_or_default().to_string() };
     let mut verdicts = Verdicts::new();
     for (id, _) in questions {
         if let Some(v) = reply.get(*id) {
@@ -441,8 +462,9 @@ fn score(criterion: &Criterion, transcript: &Transcript, judged: &Judged) -> Cri
             Judged::NotConfigured => (Outcome::Skipped, "no judge model configured".into()),
             Judged::Failed(e) => (Outcome::Error, e.clone()),
             Judged::Answered(verdicts) => match verdicts.get(&criterion.id) {
-                Some((true, reason)) => (Outcome::Pass, reason.clone()),
-                Some((false, reason)) => (Outcome::Fail, reason.clone()),
+                Some(v) if v.contradicts_itself() => (Outcome::Error, format!("the judge's reason contradicts its verdict ({}): {}", v.pass, v.reason)),
+                Some(v) if v.pass => (Outcome::Pass, v.reason.clone()),
+                Some(v) => (Outcome::Fail, v.reason.clone()),
                 None => (Outcome::Error, "the judge did not answer this question".into()),
             },
         },
