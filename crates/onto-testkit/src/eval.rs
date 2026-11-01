@@ -26,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::agent::{EpisodeStats, ModelConfig, Reply, ScriptedHuman, TokenUsage, chat, complete, is_budget_exhausted, run_episode};
-use crate::fixture::{Fixture, ods_available, ods_binary};
+use crate::fixture::{Fixture, fixture_not_built, ods_available, ods_binary};
 use crate::human::{Human, Persona, SimulatedHuman};
 use crate::invariants;
 use crate::session::Session;
@@ -496,6 +496,10 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, cast: Cast<
     result.skipped = None;
     if condition.needs_ods() && !ods_available() {
         result.skipped = Some("OpenDataSuite `ods` is not available".into());
+        return Ok(result);
+    }
+    if let Some(reason) = fixture_not_built(&task.fixture) {
+        result.skipped = Some(reason);
         return Ok(result);
     }
     let fixture = Fixture::new(&task.fixture)?;

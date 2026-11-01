@@ -1,0 +1,5 @@
+# Care management's high-cost definition; finance.yaml has finance's.
+entities:
+  - id: concept:high_cost_member
+    definition: A member in the top 1% by total paid amount over the trailing 12 months.
+    rationale: Care management's definition, used to pick members for outreach.

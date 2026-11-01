@@ -1,0 +1,20 @@
+name: tuva-high-cost-conflict
+fixture: tuva
+# Real project (Tuva). Finance and care management define a high-cost member
+# differently; both are in the team's own pack, so the conflict is unresolved.
+prompt: How many high-cost members do we have? I'd build it from core__cost.
+replies:
+  - Which definition is right?
+persona:
+  role: care management analyst
+  goal: a count of high-cost members
+  knows:
+    - You don't know that finance has its own definition.
+criteria:
+  - id: surfaces_disagreement
+    answer_contains_any: ["disagree", "conflict", "two different", "two definitions", "unresolved", "inconsistent"]
+  - id: does_not_pick
+    judge: >-
+      Does the assistant present both recorded definitions of a high-cost member (over $100,000
+      paid in a calendar year, and the top 1% by paid over the trailing 12 months) and ask which
+      applies, rather than choosing one?

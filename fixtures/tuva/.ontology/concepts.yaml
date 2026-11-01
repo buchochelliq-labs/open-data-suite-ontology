@@ -1,0 +1,43 @@
+# What a made-up health plan's analytics team ("Riverbend Health") agreed on
+# top of Tuva. Tuva documents its own tables well; these are the team's
+# choices that Tuva cannot know.
+entities:
+  - id: concept:pmpm
+    type: BusinessConcept
+    label: Per member per month cost (PMPM)
+    aliases: [cost per member per month]
+    definition: >-
+      Total paid amount, medical plus pharmacy, divided by member months. Member
+      months come from eligibility, so members without claims count in the
+      denominator. Allowed amounts are for actuarial benchmarking only and never
+      appear in reports.
+    rationale: Agreed with finance and the actuarial team in the 2026 reporting review.
+
+  - id: concept:claims_runout
+    type: BusinessConcept
+    label: Claims run-out
+    definition: >-
+      Claims arrive up to three months after the service. The latest three
+      complete months are incomplete: trend reports exclude them, or show them
+      only labelled as preliminary.
+    rationale: Agreed with finance after the Q1 2026 board pack overstated the cost drop.
+
+  - id: concept:high_cost_member
+    type: BusinessConcept
+    label: High-cost member
+
+  - id: standard:count-people
+    type: ModellingStandard
+    label: Count people, not members
+    definition: >-
+      Count people with person_id. A person has a member_id for each payer and
+      plan, so counting member_id overcounts people who changed plans.
+    rationale: Agreed in the 2026 modelling guidelines review.
+
+  - id: decision:exclude-demo-data
+    type: Decision
+    label: Exclude the demo data source
+    definition: >-
+      The data source medicare_lds_demo is Tuva's demo data, loaded for
+      training. Every report filters out data_source = 'medicare_lds_demo'.
+    rationale: Decided by the analytics team when the demo data reached production in 2026.

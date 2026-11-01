@@ -1,0 +1,36 @@
+# Tuva: a real dbt project with a made-up team layer
+
+[The Tuva Project](https://github.com/tuva-health/tuva) (Apache-2.0) is an
+open-source healthcare data model used in production: claims and clinical
+data normalised into core tables such as `core__medical_claim`,
+`core__member_month` and `core__cost`. Its dbt project documents its own
+tables thoroughly, so OpenDataSuite alone answers many questions about it.
+
+The team layer (`.ontology/`) is a made-up health plan's analytics team,
+recording what a team adopting Tuva has to decide for itself:
+
+- `concepts.yaml`: their PMPM definition (paid, medical plus pharmacy, member
+  months as denominator), the three-month claims run-out, counting people
+  rather than members, and the decision to exclude a demo data source.
+- `assets.yaml`: which Tuva models measure PMPM or are subject to run-out.
+- `finance.yaml` and `care-management.yaml`: two definitions of a high-cost
+  member that disagree, left unresolved.
+
+The four `tuva-*` tasks in `evals/` ask about these.
+
+## Building the manifest
+
+The manifest is not committed. `build.sh` clones Tuva at a pinned commit,
+installs dbt with DuckDB and runs `dbt parse` on Tuva's integration project
+(core package only), then copies `manifest.json` into `target/`.
+
+This runs Tuva's dbt code (its macros and its dbt_utils dependency). Run it
+in a sandbox, such as a CI job without secrets, not on a machine with
+credentials:
+
+```sh
+fixtures/tuva/build.sh
+```
+
+Without the manifest, the fixture's tests skip and its evaluation tasks are
+reported as not run, with the reason.

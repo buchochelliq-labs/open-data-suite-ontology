@@ -21,6 +21,14 @@ pub fn ods_available() -> bool {
     Command::new(ods_binary()).arg("--version").output().is_ok_and(|o| o.status.success())
 }
 
+/// Why a fixture cannot be used yet: one built from a project outside this
+/// repository (it has a `build.sh`) whose dbt manifest has not been built.
+pub fn fixture_not_built(name: &str) -> Option<String> {
+    let dir = repo_root().join("fixtures").join(name);
+    (dir.join("build.sh").exists() && !dir.join("target/manifest.json").exists())
+        .then(|| format!("fixture `{name}` is not built: run fixtures/{name}/build.sh"))
+}
+
 /// A disposable copy of a fixture workspace whose central source is a local
 /// git repository built from `packs/`, synced and locked.
 pub struct Fixture {

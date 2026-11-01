@@ -1,0 +1,25 @@
+name: tuva-pmpm
+fixture: tuva
+# Real project (Tuva). Tuva has paid and allowed amounts, medical and
+# pharmacy, in core__cost; which ones make the team's PMPM is the team's
+# choice, recorded in the ontology.
+prompt: >-
+  I need our PMPM for the board pack. Which Tuva model do I use, paid or allowed
+  amounts, and does pharmacy count?
+replies:
+  - What goes in the denominator?
+persona:
+  role: finance analyst at a health plan preparing the board pack
+  goal: the right model and rule for PMPM
+  knows:
+    - The plan uses the Tuva Project for its claims data.
+criteria:
+  - id: paid_with_pharmacy
+    judge: >-
+      Does the assistant say PMPM uses paid amounts (not allowed amounts) and includes pharmacy as
+      well as medical, presenting this as the team's agreed definition rather than a general
+      industry choice?
+  - id: member_month_denominator
+    judge: >-
+      Does the assistant say the denominator is member months from eligibility (core__member_month
+      or the member-month grain of core__cost), so members without claims count?

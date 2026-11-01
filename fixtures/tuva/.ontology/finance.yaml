@@ -1,0 +1,7 @@
+# Finance's high-cost definition. care-management.yaml has care management's,
+# which disagrees; both are in the team's own pack, so neither wins by
+# priority: the agent must show both and ask.
+entities:
+  - id: concept:high_cost_member
+    definition: A member whose total paid amount in a calendar year is over $100,000.
+    rationale: Finance's definition, used for stop-loss reporting.
