@@ -11,6 +11,8 @@ pub struct Config {
     pub resolution: ResolutionConfig,
     #[serde(default)]
     pub proposals: ProposalConfig,
+    #[serde(default)]
+    pub context: ContextConfig,
     #[serde(default, rename = "source")]
     pub sources: Vec<SourceConfig>,
 }
@@ -32,6 +34,19 @@ pub struct ProposalConfig {
     /// repository-layer pack source.
     #[serde(default)]
     pub target: Option<String>,
+}
+
+/// Where `onto sync` keeps the context digest fresh for agents.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ContextConfig {
+    /// File the digest is written to after each sync, relative to the
+    /// workspace root (e.g. `.onto/context.md`). Unset: no digest is written.
+    #[serde(default)]
+    pub path: Option<String>,
+    /// Longest digest in characters (about four per token).
+    #[serde(default)]
+    pub max_chars: Option<usize>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

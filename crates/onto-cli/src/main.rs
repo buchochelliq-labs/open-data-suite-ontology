@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+mod agents;
+
 use anyhow::{Context, Result, bail};
 use clap::{Parser, Subcommand};
 use onto_workspace::proposals;
@@ -26,6 +28,10 @@ enum Command {
         /// Pack directory inside the central repository.
         #[arg(long, default_value = "packs/core")]
         central_path: String,
+        /// Connect coding agents: claude-code, copilot, generic (comma-separated).
+        /// Also works in a repository that already has onto.toml.
+        #[arg(long, value_delimiter = ',')]
+        agents: Vec<agents::Agent>,
     },
     /// Fetch every configured source into the local store.
     Sync {
@@ -108,10 +114,30 @@ fn reviewer(by: Option<String>) -> Result<String> {
     }
 }
 
-fn init(root: &std::path::Path, central: Option<String>, central_path: String) -> Result<()> {
+fn init(root: &std::path::Path, central: Option<String>, central_path: String, agents: Vec<agents::Agent>) -> Result<()> {
     let config = root.join("onto.toml");
     if config.exists() {
-        bail!("{} already exists", config.display());
+        if agents.is_empty() {
+            bail!("{} already exists (to connect agents, pass --agents)", config.display());
+        }
+        let text = std::fs::read_to_string(&config)?;
+        // Parsed, not matched by text: `[ context ]` or a trailing comment
+        // is the same table, and a second one would break onto.toml.
+        let parsed: toml::Table = toml::from_str(&text).with_context(|| format!("{} is not valid TOML", config.display()))?;
+        let digest = match parsed.get("context").map(|c| c.get("path").and_then(|p| p.as_str())) {
+            None => {
+                std::fs::write(&config, format!("{}\n\n{}", text.trim_end(), context_section()))?;
+                agents::DIGEST_PATH.to_string()
+            }
+            // Agents are pointed where `onto sync` actually writes.
+            Some(Some(path)) => path.to_string(),
+            Some(None) => {
+                eprintln!("warning: [context] in {} has no `path`, so `onto sync` writes no digest; add path = {:?}", config.display(), agents::DIGEST_PATH);
+                agents::DIGEST_PATH.to_string()
+            }
+        };
+        onto_workspace::local::ignore_state_dir(root)?;
+        return connect_agents(root, &agents, &digest);
     }
     let mut text = String::from("[resolution]\nmode = \"priority\"\n");
     if let Some(url) = central {
@@ -122,11 +148,32 @@ fn init(root: &std::path::Path, central: Option<String>, central_path: String) -
         text.push_str("priority = [\"repo\"]\n");
     }
     text.push_str("\n[[source]]\nid = \"repo\"\nlayer = \"repository\"\nkind = \"pack\"\npath = \".ontology\"\n");
+    text.push('\n');
+    text.push_str(&context_section());
     std::fs::create_dir_all(root.join(".ontology"))?;
     std::fs::write(&config, text)?;
     let ignored = onto_workspace::local::ignore_state_dir(root)?;
     println!("Created {} and .ontology/.{} Commit them, then run `onto sync`.", config.display(), if ignored { " Added .onto/ to .gitignore." } else { "" });
     println!("Each person runs `onto sync` on their own machine; synced facts stay in .onto/ and are never committed.");
+    connect_agents(root, &agents, agents::DIGEST_PATH)
+}
+
+/// The `[context]` section: `onto sync` keeps each person's digest fresh.
+fn context_section() -> String {
+    format!(
+        "# `onto sync` writes each person's digest of the team's facts here (never committed).\n[context]\npath = {}\n",
+        serde_json::to_string(agents::DIGEST_PATH).expect("a string")
+    )
+}
+
+fn connect_agents(root: &std::path::Path, agents: &[agents::Agent], digest: &str) -> Result<()> {
+    for agent in agents {
+        let written = agents::setup(root, *agent, digest)?;
+        println!("Connected {agent:?}: {}. Commit them.", written.join(", "));
+    }
+    if !agents.is_empty() {
+        println!("Each person runs `onto sync` to write their digest to {digest}.");
+    }
     Ok(())
 }
 
@@ -136,8 +183,8 @@ fn print_json(value: &impl serde::Serialize) -> Result<()> {
 }
 
 async fn run(cli: Cli) -> Result<ExitCode> {
-    if let Command::Init { central, central_path } = cli.command {
-        init(&cli.root, central, central_path)?;
+    if let Command::Init { central, central_path, agents } = cli.command {
+        init(&cli.root, central, central_path, agents)?;
         return Ok(ExitCode::SUCCESS);
     }
     let workspace = Workspace::load(&cli.root).context("loading workspace")?;
@@ -163,6 +210,18 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                         eprintln!("FAILED  {:<16} {error} (previous generation kept)", report.source_id);
                     }
                 }
+            }
+            // Sources that failed keep their previous generation, so the
+            // digest still reflects the best facts available.
+            if let Some(path) = &workspace.config.context.path {
+                let max_chars = workspace.config.context.max_chars.unwrap_or_else(|| onto_workspace::digest::DigestOptions::default().max_chars);
+                let digest = onto_workspace::digest::render(&workspace, &store, &onto_workspace::digest::DigestOptions { max_chars })?;
+                let target = workspace.root.join(path);
+                if let Some(dir) = target.parent() {
+                    std::fs::create_dir_all(dir)?;
+                }
+                std::fs::write(&target, digest)?;
+                println!("wrote   digest           {path}");
             }
             return Ok(if failed { ExitCode::FAILURE } else { ExitCode::SUCCESS });
         }

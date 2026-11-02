@@ -16,6 +16,6 @@ exists here with tests, not that every option carried over.
 | `model_planning.py`, `planning_contracts.py` | dbt domain crate (planned) | Not started. |
 | `modelling_mcp.py`, `uol_mcp.py` | `onto-mcp` | 5 generic tools. dbt-specific tools return with the dbt crate. |
 | `ods_mcp.py` | ODS's own MCP server, routed by the skill | Replaced: agents call `ods_lineage`/`ods_impact` directly; no adapter needed. |
-| `.github/skills/dbt-context-routing`, `.github/agents/*` | `skills/ontology-grounding`, `agents/ontology-modelling` | Rewritten for the generic tools and tested against them. |
+| `.github/skills/dbt-context-routing`, `.github/agents/*` | `skills/ontology-grounding`, `agents/ontology-modelling` (Claude Code) and `.github/agents/ontology-modelling` (Copilot) | Rewritten for the generic tools and tested against them. |
 | `cache_security.py`, `workspace_store.py`, `application_*`, `native_*`, `frontend/` | — | Deferred (encryption, UX). |
 | `experiments/offline_backends` | — | Findings kept as context in ARCHITECTURE.md; code not ported. |
