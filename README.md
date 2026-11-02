@@ -128,4 +128,9 @@ and both, scored by checks and a judge model (`onto-eval`, or the manual
 ## Status
 
 First slice. See [docs/MIGRATION.md](docs/MIGRATION.md) for what has been ported
-from dbt-skills and what has not. No license has been chosen yet.
+from dbt-skills and what has not.
+
+## License
+
+Apache License 2.0: see [LICENSE](LICENSE). OpenDataSuite, which `onto` builds on,
+is also Apache-2.0.

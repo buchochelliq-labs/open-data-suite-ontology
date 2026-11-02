@@ -8,6 +8,7 @@ edition = "2024"
 # OpenDataSuite crates (and rs-rich) require 1.90.
 rust-version = "1.90"
 publish = false
+license = "Apache-2.0"
 repository = "https://github.com/buchochelliq-labs/open-data-suite-ontology"
 
 [workspace.dependencies]

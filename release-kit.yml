@@ -22,4 +22,4 @@ packages:
       # arm64), macOS (arm64, x86_64) and Windows (x86_64): the kit's defaults.
       - kind: rust-binary
         bin: onto
-        include: [README.md]
+        include: [README.md, LICENSE]
