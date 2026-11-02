@@ -86,15 +86,23 @@ fn write(path: &Path, text: &str) -> Result<()> {
     Ok(())
 }
 
-const POINTER: &str = "## Team ontology\n\n\
-This repository has a team ontology (`onto.toml`): agreed definitions, grains, \
-standards and decisions, each with its source. Ground data-modelling answers in \
-it through the `onto` MCP server (and OpenDataSuite's `ods` for the dbt \
-project's structure). Your own digest of the team's facts is in \
-`.onto/context.md` after `onto sync`; it is per person and never committed.";
+/// What every agent is told about the ontology and where `onto sync` writes
+/// its digest (the configured `[context] path`).
+fn pointer(digest: &str) -> String {
+    format!(
+        "## Team ontology\n\n\
+         This repository has a team ontology (`onto.toml`): agreed definitions, grains, \
+         standards and decisions, each with its source. Ground data-modelling answers in \
+         it through the `onto` MCP server (and OpenDataSuite's `ods` for the dbt \
+         project's structure). Your own digest of the team's facts is in \
+         `{digest}` after `onto sync`; it is per person and never committed."
+    )
+}
 
-/// Set up `agent` in the workspace at `root`; returns the files written.
-pub fn setup(root: &Path, agent: Agent) -> Result<Vec<String>> {
+/// Set up `agent` in the workspace at `root`, pointing it at the digest
+/// `onto sync` writes to `digest`; returns the files written.
+pub fn setup(root: &Path, agent: Agent, digest: &str) -> Result<Vec<String>> {
+    let pointer = pointer(digest);
     let with_ods = root.join("dbt_project.yml").exists();
     let mut written = Vec::new();
     match agent {
@@ -104,7 +112,7 @@ pub fn setup(root: &Path, agent: Agent) -> Result<Vec<String>> {
             write(&root.join(".claude/skills/steno/SKILL.md"), STENO_SKILL)?;
             // CLAUDE.md imports the digest; a teammate who has not synced yet
             // simply has no file to import.
-            upsert_section(&root.join("CLAUDE.md"), &format!("{POINTER}\n\n@{DIGEST_PATH}"))?;
+            upsert_section(&root.join("CLAUDE.md"), &format!("{pointer}\n\n@{digest}"))?;
             written.extend([".mcp.json", ".claude/skills/ontology-grounding/SKILL.md", ".claude/skills/steno/SKILL.md", "CLAUDE.md"].map(String::from));
         }
         Agent::Copilot => {
@@ -112,7 +120,7 @@ pub fn setup(root: &Path, agent: Agent) -> Result<Vec<String>> {
             write(&root.join(".github/agents/ontology-modelling.agent.md"), MODELLING_AGENT)?;
             write(&root.join(".github/skills/ontology-grounding/SKILL.md"), GROUNDING_SKILL)?;
             write(&root.join(".github/skills/steno/SKILL.md"), STENO_SKILL)?;
-            upsert_section(&root.join(".github/copilot-instructions.md"), &format!("{POINTER} Read it before answering."))?;
+            upsert_section(&root.join(".github/copilot-instructions.md"), &format!("{pointer} Read it before answering."))?;
             written.extend(
                 [
                     ".vscode/mcp.json",
@@ -129,7 +137,7 @@ pub fn setup(root: &Path, agent: Agent) -> Result<Vec<String>> {
             upsert_section(
                 &root.join("AGENTS.md"),
                 &format!(
-                    "{POINTER} Read it before answering.\n\nMCP servers (stdio): {servers}. Without MCP, `onto search`, \
+                    "{pointer} Read it before answering.\n\nMCP servers (stdio): {servers}. Without MCP, `onto search`, \
                      `onto show <id>` and `onto neighbors <id>` read the same facts."
                 ),
             )?;

@@ -71,6 +71,25 @@ fn an_existing_context_table_is_recognised_however_it_is_written() {
     onto(root, &["status"]);
 }
 
+/// Codex review: agents are pointed at the digest path the workspace
+/// configures, which is where `onto sync` writes it.
+#[test]
+fn agents_are_pointed_at_the_configured_digest() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    onto(root, &["init"]);
+    let text = read(root, "onto.toml").replace("path = \".onto/context.md\"", "path = \"docs/team-context.md\"");
+    std::fs::write(root.join("onto.toml"), text).unwrap();
+    onto(root, &["init", "--agents", "claude-code,copilot,generic"]);
+    assert!(read(root, "CLAUDE.md").contains("@docs/team-context.md"));
+    for file in ["CLAUDE.md", ".github/copilot-instructions.md", "AGENTS.md"] {
+        let text = read(root, file);
+        assert!(text.contains("`docs/team-context.md`") && !text.contains(".onto/context.md"), "{file}: {text}");
+    }
+    assert!(onto(root, &["sync"]).contains("docs/team-context.md"));
+    assert!(root.join("docs/team-context.md").exists());
+}
+
 #[test]
 fn init_on_an_existing_workspace_needs_agents() {
     let dir = tempfile::tempdir().unwrap();

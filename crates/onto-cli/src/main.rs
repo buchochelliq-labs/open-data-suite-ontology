@@ -124,11 +124,20 @@ fn init(root: &std::path::Path, central: Option<String>, central_path: String, a
         // Parsed, not matched by text: `[ context ]` or a trailing comment
         // is the same table, and a second one would break onto.toml.
         let parsed: toml::Table = toml::from_str(&text).with_context(|| format!("{} is not valid TOML", config.display()))?;
-        if !parsed.contains_key("context") {
-            std::fs::write(&config, format!("{}\n\n{}", text.trim_end(), context_section()))?;
-        }
+        let digest = match parsed.get("context").map(|c| c.get("path").and_then(|p| p.as_str())) {
+            None => {
+                std::fs::write(&config, format!("{}\n\n{}", text.trim_end(), context_section()))?;
+                agents::DIGEST_PATH.to_string()
+            }
+            // Agents are pointed where `onto sync` actually writes.
+            Some(Some(path)) => path.to_string(),
+            Some(None) => {
+                eprintln!("warning: [context] in {} has no `path`, so `onto sync` writes no digest; add path = {:?}", config.display(), agents::DIGEST_PATH);
+                agents::DIGEST_PATH.to_string()
+            }
+        };
         onto_workspace::local::ignore_state_dir(root)?;
-        return connect_agents(root, &agents);
+        return connect_agents(root, &agents, &digest);
     }
     let mut text = String::from("[resolution]\nmode = \"priority\"\n");
     if let Some(url) = central {
@@ -146,7 +155,7 @@ fn init(root: &std::path::Path, central: Option<String>, central_path: String, a
     let ignored = onto_workspace::local::ignore_state_dir(root)?;
     println!("Created {} and .ontology/.{} Commit them, then run `onto sync`.", config.display(), if ignored { " Added .onto/ to .gitignore." } else { "" });
     println!("Each person runs `onto sync` on their own machine; synced facts stay in .onto/ and are never committed.");
-    connect_agents(root, &agents)
+    connect_agents(root, &agents, agents::DIGEST_PATH)
 }
 
 /// The `[context]` section: `onto sync` keeps each person's digest fresh.
@@ -157,13 +166,13 @@ fn context_section() -> String {
     )
 }
 
-fn connect_agents(root: &std::path::Path, agents: &[agents::Agent]) -> Result<()> {
+fn connect_agents(root: &std::path::Path, agents: &[agents::Agent], digest: &str) -> Result<()> {
     for agent in agents {
-        let written = agents::setup(root, *agent)?;
+        let written = agents::setup(root, *agent, digest)?;
         println!("Connected {agent:?}: {}. Commit them.", written.join(", "));
     }
     if !agents.is_empty() {
-        println!("Each person runs `onto sync` to write their digest to {}.", agents::DIGEST_PATH);
+        println!("Each person runs `onto sync` to write their digest to {digest}.");
     }
     Ok(())
 }
