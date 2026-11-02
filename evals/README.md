@@ -123,7 +123,7 @@ team layer (a PMPM definition, claims run-out, a demo data source to exclude,
 and two conflicting definitions of a high-cost member). Its manifest is built
 by `fixtures/tuva/build.sh`, which runs Tuva's dbt code. The workflows build
 it in a separate job without permissions or secrets and download it. Locally,
-until it is built, the four `tuva-*` tasks are reported as not run.
+until it is built, the seven `tuva-*` tasks are reported as not run.
 See its [README](../fixtures/tuva/README.md).
 
 ### A fixture from a real project

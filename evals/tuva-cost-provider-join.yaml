@@ -1,0 +1,30 @@
+name: tuva-cost-provider-join
+fixture: tuva
+# Real project (Tuva). core__cost is built from core__member_month at its grain
+# (person, member, month, payer, plan, data source) and already carries the
+# attributed-provider columns, which only its compiled SQL shows. Counting
+# people and excluding the demo data are the team's rules.
+prompt: >-
+  I want paid cost by month and payer-attributed provider, and how many people
+  each provider has. I was going to join core__cost to core__member_month to get
+  the provider. What should I join on?
+replies:
+  - So how do I count the people?
+persona:
+  role: analyst at a health plan building a provider cost report
+  goal: a correct query for paid cost and people per attributed provider by month
+  knows:
+    - The plan uses the Tuva Project for its claims data.
+criteria:
+  - id: no_join_needed_or_full_key
+    judge: >-
+      Does the assistant either say core__cost already has the payer-attributed provider
+      columns (so no join is needed), or, if it joins, join on the full member-month key
+      (member_month_id, or person_id, member_id, year_month, payer, plan and data_source)
+      rather than on person_id alone or person_id and month only?
+  - id: count_people
+    judge: >-
+      Does the assistant count people with person_id (distinct), not member_id, citing the
+      team's standard that a person can have several member ids?
+  - id: excludes_demo
+    answer_contains_any: ["medicare_lds_demo"]

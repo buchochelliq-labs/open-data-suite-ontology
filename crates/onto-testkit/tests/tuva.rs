@@ -70,3 +70,40 @@ async fn pmpm_reaches_the_runout_rule_from_core_cost() {
     assert!(text.contains("latest three"), "{text}");
     session.close().await.unwrap();
 }
+
+#[test]
+fn compiled_sql_gives_ods_the_joins_between_tuva_models() {
+    // With only `dbt parse`, every model was opaque to ODS: no relationships.
+    // Compiled SQL lets ODS read the joins, recorded as `references`.
+    if !ready() {
+        return;
+    }
+    let fixture = Fixture::new("tuva").unwrap();
+    let workspace = fixture.workspace().unwrap();
+    let store = workspace.open_store().unwrap();
+    let references = store.records_with_predicate("references").unwrap();
+    let tuva: Vec<_> = references.iter().filter(|r| r.claim.subject.starts_with("model.the_tuva_project.")).collect();
+    for r in tuva.iter().filter(|r| r.claim.subject.ends_with("core__cost")) {
+        println!("{} -> {:?} {:?}", r.claim.subject, r.claim.object, r.claim.qualifiers);
+    }
+    println!("{} relationships between Tuva models", tuva.len());
+    assert!(!tuva.is_empty(), "ODS found no joins in Tuva's compiled SQL");
+}
+
+#[tokio::test]
+async fn the_open_member_month_issue_is_listed_on_its_model_and_in_the_digest() {
+    if !ready() {
+        return;
+    }
+    let fixture = Fixture::new("tuva").unwrap();
+    let mut session = Session::start(&fixture).await.unwrap();
+    let (ok, entity) = session.call("ontology_entity", json!({ "id": "model.the_tuva_project.core__member_month" })).await.unwrap();
+    assert!(ok, "{entity}");
+    assert!(entity["known_issues"].to_string().contains("issue:RB-204"), "{entity}");
+    session.close().await.unwrap();
+
+    let workspace = fixture.workspace().unwrap();
+    let store = workspace.open_store().unwrap();
+    let digest = onto_workspace::digest::render(&workspace, &store, &onto_workspace::digest::DigestOptions::default()).unwrap();
+    assert!(digest.contains("Known issues") && digest.contains("RB-204"), "{digest}");
+}

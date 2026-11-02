@@ -15,8 +15,15 @@ recording what a team adopting Tuva has to decide for itself:
 - `assets.yaml`: which Tuva models measure PMPM or are subject to run-out.
 - `finance.yaml` and `care-management.yaml`: two definitions of a high-cost
   member that disagree, left unresolved.
+- `known_issues.yaml`: an open known issue, RB-204, on `core__member_month`
+  (April 2026 member months short for one payer), which reaches anything
+  built on member months, such as PMPM from `core__cost`.
 
-The four `tuva-*` tasks in `evals/` ask about these.
+The seven `tuva-*` tasks in `evals/` ask about these. Three of them
+(`tuva-cost-provider-join`, `tuva-pmpm-april-issue` and
+`tuva-utilization-runout`) need the links between Tuva's models: which
+models are built on which (lineage), and what they join on and carry, which
+only the compiled SQL shows.
 
 ## Building the manifest
 

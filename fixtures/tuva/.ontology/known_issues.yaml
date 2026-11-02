@@ -1,0 +1,23 @@
+# Known defects the team tracks on Tuva's models (made up, like the rest of
+# the team layer). RB-204 is on core__member_month, but it reaches anything
+# built on member months, such as core__cost's PMPM.
+entities:
+  - id: issue:RB-204
+    type: KnownIssue
+    label: April 2026 member months short for the commercial feed
+    definition: >-
+      The commercial payer's April 2026 eligibility file arrived truncated, so
+      core__member_month is missing about 8% of commercial members for
+      2026-04. Anything divided by member months for April 2026 (PMPM, per
+      1,000 rates) is overstated for that payer.
+    properties:
+      status: open
+      ticket: RB-204
+      since: "2026-04-01"
+      workaround: >-
+        Show April 2026 as not comparable, or use the payer's corrected member
+        count (in the eligibility reconciliation sheet) until the file is
+        reloaded.
+    relations:
+      - { predicate: affects, target: model.the_tuva_project.core__member_month, valid: { from: "2026-04-01" } }
+    rationale: Found in the 2026-05 eligibility reconciliation.
