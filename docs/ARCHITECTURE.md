@@ -61,7 +61,7 @@ Why per person:
   check is bypassed by a teammate's copy.
 - **Nothing synced is committed.** Shared files such as accepted proposals refer
   to external facts by id (`model.jaffle_ods.orders`). They never copy them.
-- **Freshness is visible.** `ontology_status` shows each source's `synced_at` and
+- **Freshness is visible.** `ontology_status` (and `ontology_overview`) shows each source's `synced_at` and
   version, and tells the agent that teammates sync independently.
 
 Consistency comes from the shared configuration: `onto.lock` pins central
