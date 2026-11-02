@@ -77,14 +77,14 @@ async fn the_answer_stays_within_its_caps_and_budget() {
     assert!(ok, "{overview}");
     assert_eq!(overview["concepts"].as_array().unwrap().len(), 20, "{overview}");
     assert_eq!(overview["predicates"].as_array().unwrap().len(), 30, "{overview}");
-    assert!(overview.to_string().len() < 8_000 + 500, "{} characters", overview.to_string().len());
+    assert!(overview.to_string().len() <= 8_000, "{} characters", overview.to_string().len());
     let omitted = overview["omitted"].as_str().unwrap();
     assert!(omitted.contains("37 predicates") && omitted.contains("45 concepts"), "{omitted}");
 
     // A smaller budget cuts every list down to fit.
     let (_, small) = session.call("ontology_overview", json!({ "max_chars": 1000 })).await.unwrap();
-    let listed: usize = ["types", "predicates", "concepts", "standards", "health"].iter().map(|k| small[k].to_string().len()).sum();
-    assert!(listed <= 1_000 + 100, "sections stay near the budget: {listed}");
+    // The whole serialized answer counts, field names, notice and escaping included.
+    assert!(small.to_string().len() <= 1_000, "the answer fits the budget: {}", small.to_string().len());
     assert!(small["omitted"].as_str().unwrap().contains("1000-character budget"), "{small}");
     session.close().await.unwrap();
 }
@@ -136,5 +136,32 @@ async fn concepts_lead_to_the_models_that_represent_them() {
     assert!(predicates.contains(&"has_column: DataAsset → Attribute (65)".to_string()), "{overview}");
     assert!(predicates.contains(&"measured_by: BusinessConcept → BusinessConcept (1)".to_string()), "{overview}");
     assert_eq!(lines(&overview["health"]["sources"]).len(), 3, "{overview}");
+    session.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn an_unresolved_relationship_is_not_counted_as_a_link() {
+    // Two pack files in the same source disagree on a one-valued relationship,
+    // so neither wins: the overview counts the use but links neither candidate.
+    let fixture = Fixture::new("shop").unwrap();
+    let concepts = "entities:\n  - id: concept:team_a\n    type: BusinessConcept\n    label: Team A\n  - id: concept:team_b\n    type: BusinessConcept\n    label: Team B\n";
+    add_pack(&fixture, "teams.yaml", concepts);
+    add_pack(
+        &fixture,
+        "owner_a.yaml",
+        "entities:\n  - id: concept:refund_policy\n    type: BusinessConcept\n    relations:\n      - { predicate: owned_by, target: concept:team_a }\n",
+    );
+    add_pack(&fixture, "owner_b.yaml", "entities:\n  - id: concept:refund_policy\n    relations:\n      - { predicate: owned_by, target: concept:team_b }\n");
+    let mut session = Session::start(&fixture).await.unwrap();
+    let (ok, overview) = session.call("ontology_overview", json!({})).await.unwrap();
+    assert!(ok, "{overview}");
+    let predicates = lines(&overview["predicates"]);
+    let owned_by = predicates.iter().find(|l| l.starts_with("owned_by")).expect("owned_by is listed");
+    assert!(owned_by.contains("BusinessConcept → unresolved (1)"), "{owned_by}");
+    assert!(!owned_by.contains("BusinessConcept → BusinessConcept"), "no candidate is picked: {owned_by}");
+    for team in ["concept:team_a", "concept:team_b"] {
+        let line = lines(&overview["concepts"]).into_iter().find(|l| l.starts_with(team)).expect("team listed");
+        assert!(line.contains("(0 links)"), "a disputed target gets no link: {line}");
+    }
     session.close().await.unwrap();
 }

@@ -2,8 +2,9 @@
 //! connect, for an agent that has no word to search for yet.
 //!
 //! Every section is a list of one-line strings, capped in length and in count,
-//! and the whole answer stays within a character budget. What does not fit is
-//! counted in `omitted`.
+//! and the whole serialized answer stays within a character budget (health is
+//! always included, even when it alone is larger). What does not fit is counted
+//! in `omitted`.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -28,6 +29,8 @@ const STANDARD_DEFINITION_CHARS: usize = 200;
 const SHORT_TEXT_CHARS: usize = 60;
 /// How a literal object is shown in a predicate's type pairs.
 const TEXT: &str = "text";
+/// How the object of an unresolved conflict is shown: no candidate is picked.
+const UNRESOLVED: &str = "unresolved";
 const UNTYPED: &str = "untyped";
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -133,7 +136,9 @@ pub fn overview(workspace: &Workspace, store: &Store, health: Health, req: Overv
     // and are left out.
     let mut declared_types: BTreeMap<String, Option<String>> = BTreeMap::new();
     let mut entity_types: HashMap<String, Vec<String>> = HashMap::new();
-    let mut values: Vec<(String, String, Option<String>)> = Vec::new();
+    // (subject, predicate, object): `Some(Some(id))` links an entity,
+    // `Some(None)` is a literal and `None` an unresolved conflict.
+    let mut values: Vec<(String, String, Option<Option<String>>)> = Vec::new();
     let mut concepts = Vec::new();
     let mut standards = Vec::new();
     for subject in store.subjects().map_err(err)? {
@@ -152,18 +157,21 @@ pub fn overview(workspace: &Workspace, store: &Store, health: Health, req: Overv
             if property.predicate.starts_with("onto:") {
                 continue;
             }
-            // An unresolved conflict has no usable value but is still a use of the predicate.
-            let used = if property.values.is_empty() {
-                property.conflict.as_ref().and_then(|c| c.candidates.first()).into_iter().collect::<Vec<_>>()
-            } else {
-                property.values.iter().collect()
-            };
-            for value in used {
+            // An unresolved conflict has no usable value but is still a use of
+            // the predicate. No candidate is picked: it counts as `unresolved`,
+            // not as a link to either candidate.
+            if property.values.is_empty() {
+                if property.conflict.is_some() {
+                    values.push((subject.clone(), property.predicate.clone(), None));
+                }
+                continue;
+            }
+            for value in &property.values {
                 let object = match &value.object {
                     Object::Entity(id) => Some(id.clone()),
                     Object::Literal(_) => None,
                 };
-                values.push((subject.clone(), property.predicate.clone(), object));
+                values.push((subject.clone(), property.predicate.clone(), Some(object)));
             }
         }
         let label = view.text(vocab::LABEL).filter(|l| *l != subject).map(str::to_string);
@@ -209,11 +217,12 @@ pub fn overview(workspace: &Workspace, store: &Store, health: Health, req: Overv
     for (subject, predicate, object) in &values {
         let from = type_label(entity_types.get(subject));
         let to = match object {
-            Some(object) => type_label(entity_types.get(object)),
-            None => TEXT.to_string(),
+            Some(Some(object)) => type_label(entity_types.get(object)),
+            Some(None) => TEXT.to_string(),
+            None => UNRESOLVED.to_string(),
         };
         *by_predicate.entry(compact::predicate(predicate).to_string()).or_default().entry((from, to)).or_default() += 1;
-        if let Some(object) = object {
+        if let Some(Some(object)) = object {
             *degree.entry(subject).or_default() += 1;
             *degree.entry(object).or_default() += 1;
             if predicate == "represents" {
@@ -285,16 +294,31 @@ pub fn overview(workspace: &Workspace, store: &Store, health: Health, req: Overv
         })
         .collect();
 
-    // Fill the budget section by section; health is always included.
-    let mut used = serde_json::to_string(&health).map_err(err)?.len();
+    // Fill the budget section by section, counting the serialized answer: the
+    // empty response with health and the longest possible `omitted` first, then
+    // each line as JSON (quotes, escapes and its comma). Health is always included.
+    let omitted_line =
+        |more: &str| format!("{more} not shown (list caps or the {budget}-character budget): raise max_chars, or use ontology_search with entity_type");
+    let skeleton = OverviewResponse {
+        types: Vec::new(),
+        predicates: Vec::new(),
+        concepts: Vec::new(),
+        standards: Vec::new(),
+        health,
+        omitted: Some(omitted_line(&format!("{0} types, {0} predicates, {0} concepts, {0} standards", usize::MAX))),
+        notice: super::NOTICE.into(),
+    };
+    let mut used = serde_json::to_string(&skeleton).map_err(err)?.len();
+    let health = skeleton.health;
     let mut fill = |lines: Vec<String>, cap: usize| -> (Vec<String>, usize) {
         let total = lines.len();
         let mut kept = Vec::new();
         for line in lines.into_iter().take(cap) {
-            if used + line.len() + 3 > budget {
+            let cost = serde_json::to_string(&line).map_or(line.len() + 3, |json| json.len() + 1);
+            if used + cost > budget {
                 break;
             }
-            used += line.len() + 3;
+            used += cost;
             kept.push(line);
         }
         let skipped = total - kept.len();
@@ -311,9 +335,7 @@ pub fn overview(workspace: &Workspace, store: &Store, health: Health, req: Overv
             more.push(format!("{n} {what}"));
         }
     }
-    let omitted = (!more.is_empty()).then(|| {
-        format!("{} not shown (list caps or the {budget}-character budget): raise max_chars, or use ontology_search with entity_type", more.join(", "))
-    });
+    let omitted = (!more.is_empty()).then(|| omitted_line(&more.join(", ")));
     Ok(OverviewResponse { types, predicates, concepts, standards, health, omitted, notice: super::NOTICE.into() })
 }
 
