@@ -86,6 +86,23 @@ pub fn known_issues(workspace: &Workspace, store: &Store, ids: Option<&[String]>
     Ok(out)
 }
 
+/// The predicates an issue line shows, in order.
+const SHOWN: [&str; 7] = [vocab::LABEL, STATUS, "since", "fixed_in", "ticket", vocab::DEFINITION, "workaround"];
+
+/// Where the shown values come from: `[repo reviewed]` when every value shares
+/// its sources, otherwise each value's own, as
+/// `[definition: repo reviewed; workaround: central inferred]`.
+fn cite(view: &EntityView) -> String {
+    let cited: Vec<(&str, String)> =
+        SHOWN.iter().filter_map(|p| view.property(p).and_then(|prop| prop.values.first()).map(|v| (compact::predicate(p), compact::sources(v)))).collect();
+    let Some((_, first)) = cited.first() else { return String::new() };
+    if cited.iter().all(|(_, s)| s == first) {
+        return format!(" {first}");
+    }
+    let parts: Vec<String> = cited.iter().map(|(p, s)| format!("{p}: {}", s.trim_start_matches('[').trim_end_matches(']'))).collect();
+    format!(" [{}]", parts.join("; "))
+}
+
 /// `issue:DATA-412 Plan changes show as churn (open, since 2026-01-01, ticket DATA-412) affects model.acme.fct_mrr: … Workaround: … [repo reviewed]`
 pub fn line(view: &EntityView, affects: &[String]) -> String {
     let text = |predicate: &str| view.text(predicate);
@@ -113,9 +130,14 @@ pub fn line(view: &EntityView, affects: &[String]) -> String {
     if let Some(workaround) = text("workaround") {
         out.push_str(&format!(" Workaround: {workaround}"));
     }
-    let cited = [vocab::DEFINITION, STATUS, vocab::LABEL].into_iter().find_map(|p| view.property(p).and_then(|p| p.values.first()));
-    if let Some(value) = cited {
-        out.push_str(&format!(" {}", compact::sources(value)));
+    out.push_str(&cite(view));
+    // Disagreements on what the line shows are spelled out, never hidden as absent.
+    for disputed in compact::facts(view, false, |_| true)
+        .lines
+        .into_iter()
+        .filter(|l| l.contains(": sources disagree (") && SHOWN.iter().any(|p| l.starts_with(&format!("{}: ", compact::predicate(p)))))
+    {
+        out.push_str(&format!(" Disputed {disputed}."));
     }
     // Every word in the line comes from a source, so the whole line is checked.
     let marker = compact::instruction_marker(&out);
@@ -154,6 +176,42 @@ mod tests {
     fn an_issue_without_a_status_is_open() {
         let issue = view(vec![Claim::literal("issue:X-1", vocab::LABEL, "Late refunds")]);
         assert_eq!(line(&issue, &["model.a.refunds#amount".into()]), "issue:X-1 Late refunds (open) affects model.a.refunds#amount [repo reviewed]");
+    }
+
+    #[test]
+    fn each_value_cites_its_own_source_when_they_differ() {
+        let records = vec![
+            Record {
+                claim: Claim::literal("issue:X-1", vocab::DEFINITION, "Refunds arrive a day late."),
+                provenance: Provenance::new("repo", Layer::Repository, Authority::Reviewed),
+            },
+            Record {
+                claim: Claim::literal("issue:X-1", "workaround", "Use refunds_v2."),
+                provenance: Provenance::new("central", Layer::Central, Authority::Inferred),
+            },
+        ];
+        let issue = Resolver::default().resolve_entity("issue:X-1", &records, &Schema::default());
+        let line = line(&issue, &["model.a.refunds".into()]);
+        assert!(line.ends_with("[definition: repo reviewed; workaround: central inferred]"), "{line}");
+    }
+
+    #[test]
+    fn a_disputed_workaround_is_shown_not_dropped() {
+        let records = vec![
+            Record {
+                claim: Claim::literal("issue:X-1", "workaround", "Use refunds_v2."),
+                provenance: Provenance::new("repo", Layer::Repository, Authority::Reviewed),
+            },
+            Record {
+                claim: Claim::literal("issue:X-1", "workaround", "Filter refunds after day one."),
+                provenance: Provenance::new("team", Layer::Repository, Authority::Reviewed),
+            },
+        ];
+        let schema = Schema::default();
+        let issue = Resolver::default().resolve_entity("issue:X-1", &records, &schema);
+        let line = line(&issue, &["model.a.refunds".into()]);
+        assert!(line.contains("Disputed workaround: sources disagree ("), "{line}");
+        assert!(line.contains("Use refunds_v2.") && line.contains("Filter refunds after day one."), "{line}");
     }
 
     #[test]
