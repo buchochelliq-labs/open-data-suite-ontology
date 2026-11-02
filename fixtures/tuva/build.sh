@@ -31,7 +31,25 @@ cd "$build/tuva/integration_tests"
 printf 'packages:\n  - local: ../\n' > packages.yml
 export DBT_PROFILES_DIR="$PWD/profiles/duckdb" TUVA_DUCKDB_PATH="$build/tuva.duckdb" DBT_SEND_ANONYMOUS_USAGE_STATS=false
 "$build/venv/bin/dbt" deps --quiet
-"$build/venv/bin/dbt" parse --quiet
+# `dbt compile`, not `dbt parse`, so the manifest carries each model's compiled
+# SQL: without it ODS treats every model as opaque and finds no joins. Compile
+# renders the models' Jinja against an empty local DuckDB file; it runs no
+# model, seed or hook, so no data (nor Tuva's terminology seeds) is loaded.
+# Introspective macros see missing relations (dbt_utils.star renders `*`).
+rm -f target/manifest.json
+"$build/venv/bin/dbt" compile
+
+# Every enabled model must have compiled SQL, or the fixture is not what the
+# tests expect.
+"$build/venv/bin/python" -I - target/manifest.json <<'PY'
+import json, sys
+nodes = json.load(open(sys.argv[1]))["nodes"].values()
+models = [n for n in nodes if n["resource_type"] == "model"]
+missing = sorted(n["unique_id"] for n in models if not n.get("compiled_code"))
+print(f"{len(models) - len(missing)} of {len(models)} models have compiled SQL")
+if not models or missing:
+    sys.exit("models without compiled SQL: " + ", ".join(missing[:20]))
+PY
 
 mkdir -p "$here/target"
 cp target/manifest.json "$here/target/manifest.json"
