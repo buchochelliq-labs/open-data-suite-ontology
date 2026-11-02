@@ -45,8 +45,9 @@ jobs:
         run: |
           mkdir -p ~/models
           if [ ! -f ~/models/"$MODEL_FILE" ]; then
-            pip install --quiet "huggingface_hub[cli]"
-            huggingface-cli download "$MODEL_REPO" "$MODEL_FILE" --local-dir ~/models
+            # huggingface_hub 1.x replaced huggingface-cli with hf.
+            pip install --quiet "huggingface_hub>=1"
+            hf download "$MODEL_REPO" "$MODEL_FILE" --local-dir ~/models
           fi
 
       - name: Install llama.cpp server
