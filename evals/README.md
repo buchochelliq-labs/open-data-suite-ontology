@@ -42,6 +42,7 @@ persona:                        # for runs where a model plays the person
   knows: [Facts they can share when asked.]
   accepts_proposals: false      # whether they accept a proposal they agree with
 conditions: [ontology_only]     # optional tool sets; default all three
+overlay: saas-data412-fixed     # optional: evals/overlays/<name>/ copied over the fixture (a variant)
 followup:                       # optional: a later session on the same workspace
   prompt: A teammate's question.
   replies: [...]
@@ -102,9 +103,12 @@ minimum for a comparison you want to rely on.
 `fixtures/saas` is a made-up B2B SaaS project (Stripe billing, product
 events, HubSpot) with 27 models and the mess of a real one. It has a
 retired model, a known defect in `fct_mrr`, a DAU model that does not match
-the agreed definition, and finance and sales disagreeing about ARR. Its eight
+the agreed definition, and finance and sales disagreeing about ARR. Its nine
 `saas-*` tasks include one control task (`saas-deals-to-mrr`) whose answer dbt
-alone shows. Run them with `--task saas`. Its
+alone shows. `saas-mrr-issue-fixed` runs on a variant (`overlay`) where
+`fct_mrr`'s known issue DATA-412 is fixed: the agent must not warn about it
+for current months, while `saas-downgrade-not-churn` needs it while it is
+open. Run them with `--task saas`. Its
 [README](../fixtures/saas/README.md) says how to rebuild its dbt artifacts.
 
 ### A real project: Tuva

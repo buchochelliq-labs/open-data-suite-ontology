@@ -33,6 +33,9 @@ fn every_task_file_parses_and_has_criteria() {
     for task in &tasks {
         assert!(!task.criteria.is_empty(), "{}", task.name);
         assert!(repo_root().join("fixtures").join(&task.fixture).is_dir(), "{} uses unknown fixture {}", task.name, task.fixture);
+        if let Some(overlay) = task.overlay_dir() {
+            assert!(overlay.is_dir(), "{} uses unknown overlay {}", task.name, overlay.display());
+        }
     }
 }
 

@@ -19,14 +19,14 @@
 //! invariants are checked on every run. Runs repeat, because models vary.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use crate::agent::{EpisodeStats, ModelConfig, Reply, ScriptedHuman, TokenUsage, chat, complete, is_budget_exhausted, run_episode};
-use crate::fixture::{Fixture, fixture_not_built, ods_available, ods_binary};
+use crate::fixture::{Fixture, fixture_not_built, ods_available, ods_binary, repo_root};
 use crate::human::{Human, Persona, SimulatedHuman};
 use crate::invariants;
 use crate::session::Session;
@@ -183,6 +183,10 @@ impl From<Condition> for String {
 pub struct Task {
     pub name: String,
     pub fixture: String,
+    /// A directory under `evals/overlays/` whose files replace or add to the
+    /// fixture's: a variant of the fixture, such as a known issue that is fixed.
+    #[serde(default)]
+    pub overlay: Option<String>,
     /// The person's opening message.
     pub prompt: String,
     /// The person's replies, in order, whenever the agent stops to talk.
@@ -294,6 +298,11 @@ impl Task {
         paths.retain(|p| p.extension().is_some_and(|e| e == "yaml"));
         paths.sort();
         paths.iter().map(|p| serde_norway::from_str(&std::fs::read_to_string(p)?).with_context(|| format!("parsing {}", p.display()))).collect()
+    }
+
+    /// The task's fixture overlay, if it has one.
+    pub fn overlay_dir(&self) -> Option<PathBuf> {
+        self.overlay.as_ref().map(|name| repo_root().join("evals").join("overlays").join(name))
     }
 
     /// Whether the task makes sense with `condition`'s tools. A task's
@@ -530,7 +539,7 @@ pub async fn run_task(task: &Task, condition: Condition, run: usize, cast: Cast<
         result.skipped = Some(reason);
         return Ok(result);
     }
-    let fixture = Fixture::new(&task.fixture)?;
+    let fixture = Fixture::with_overlay(&task.fixture, task.overlay_dir().as_deref())?;
     let before = fixture.repository_files()?;
     let first = Script { prompt: &task.prompt, replies: &task.replies, persona: task.persona.as_ref() };
     let (episode, mut transcript, person) = converse(&fixture, condition, cast, task.max_turns, first).await?;

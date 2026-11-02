@@ -1,0 +1,23 @@
+# Known defects in the dbt models, with their lifecycle. When DATA-412 is
+# fixed, its status becomes `fixed` and `affects` gets `valid.until`, so agents
+# stop warning about it but can still find it for the months it affected
+# (evals/overlays/saas-data412-fixed has that version).
+entities:
+  - id: issue:DATA-412
+    type: KnownIssue
+    label: Plan changes show as churn and reactivation
+    definition: >-
+      A plan change that Stripe records as one subscription cancelled before
+      month end and another started in the next month shows in fct_mrr as churn
+      followed by reactivation, instead of contraction or expansion.
+    properties:
+      status: open
+      ticket: DATA-412
+      since: "2026-01-01"
+      workaround: >-
+        Treat a churn followed by a reactivation of the same account in the next
+        month as one contraction or expansion, per the team's MRR movement
+        definition.
+    relations:
+      - { predicate: affects, target: model.acme.fct_mrr, valid: { from: "2026-01-01" } }
+    rationale: Found when April 2026 churn was misreported to the board.

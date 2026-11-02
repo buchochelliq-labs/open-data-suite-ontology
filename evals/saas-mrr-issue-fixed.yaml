@@ -1,0 +1,28 @@
+name: saas-mrr-issue-fixed
+fixture: saas
+# The fixture with DATA-412 fixed on 2026-06-01 (status fixed, `affects` valid
+# only until the fix). Pairs with saas-downgrade-not-churn, where it is open:
+# the agent must not warn that fct_mrr's current figures are affected, and may
+# mention the issue for the months before the fix.
+overlay: saas-data412-fixed
+prompt: >-
+  I'm building the board pack's churn slide for June to August 2026 from fct_mrr.
+  Is there anything wrong with fct_mrr I should warn the board about?
+replies:
+  - And if I go back to April 2026, is anything different there?
+persona:
+  role: finance analyst preparing the board pack
+  goal: know whether fct_mrr's recent churn figures can be used as they are
+  knows:
+    - The board asked for monthly churn, one figure per month.
+criteria:
+  - id: grounded
+    called_any: [ontology_context, ontology_entity]
+  - id: no_stale_warning
+    judge: >-
+      Does the assistant avoid telling the person that fct_mrr's figures for June 2026
+      onward are affected by DATA-412 (plan changes shown as churn followed by
+      reactivation)? DATA-412 was fixed on 2026-06-01. Mentioning it as fixed, or as
+      affecting only months before June 2026 such as April, passes; never mentioning it
+      passes; warning that the recent or current churn figures are affected by it, or
+      telling the person to correct them for it, fails.

@@ -18,6 +18,13 @@ types:
   - id: Decision
     label: Decision
     definition: A reviewed design choice with rationale and scope.
+  - id: KnownIssue
+    label: Known issue
+    definition: >-
+      A defect or limitation in data assets, with a lifecycle (open, fixed or
+      won't fix). The `valid` range on its `affects` relations says when it
+      affected them: give the relation `valid.until` when it is fixed, so the
+      issue drops out of current answers and stays queryable for history.
 
 predicates:
   - id: grain
@@ -104,8 +111,47 @@ predicates:
     range: literal
   - id: known_issue
     label: known issue
-    definition: A known defect or limitation of the subject that affects its results, with a ticket where there is one.
+    definition: >-
+      A free-text note about a defect or limitation of the subject. It has no
+      lifecycle; for a defect that will be fixed, record a KnownIssue entity
+      that `affects` the subject instead.
     cardinality: many
+    range: literal
+
+  # Known issues (KnownIssue entities). Digests and ontology_context list the
+  # open ones on the entities they show; fixed ones only when asked.
+  - id: affects
+    label: affects
+    definition: >-
+      An asset or column (`<node id>#<column>`) a known issue affects. Its
+      `valid` range is when the issue affected it: `from` when it started,
+      `until` when it was fixed.
+    cardinality: many
+    range: DataAsset
+  - id: status
+    label: status
+    definition: "A known issue's state: open, fixed or wont_fix."
+    cardinality: one
+    range: literal
+  - id: ticket
+    label: ticket
+    definition: The tracker ticket for a known issue, e.g. DATA-412.
+    cardinality: one
+    range: literal
+  - id: since
+    label: since
+    definition: When a known issue started, as an ISO-8601 day or a release version.
+    cardinality: one
+    range: literal
+  - id: fixed_in
+    label: fixed in
+    definition: When a known issue was fixed, as an ISO-8601 day or a release version.
+    cardinality: one
+    range: literal
+  - id: workaround
+    label: workaround
+    definition: How to get correct results while a known issue is open.
+    cardinality: one
     range: literal
   - id: measures
     label: measures

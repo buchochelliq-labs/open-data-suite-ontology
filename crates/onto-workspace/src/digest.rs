@@ -1,9 +1,10 @@
 //! A compact Markdown digest of the team's agreed context, for agents.
 //!
 //! MCP tools only help when the agent thinks to call them. The digest puts the
-//! facts most often needed in front of it: concepts, standards and decisions,
-//! the team's facts about models, and open conflicts, each with its source and
-//! authority. Facts that only OpenDataSuite asserts are left out (agents read
+//! facts most often needed in front of it: open known issues, concepts,
+//! standards and decisions, the team's facts about models, and open conflicts,
+//! each with its source and authority. Fixed known issues are left out unless
+//! asked for. Facts that only OpenDataSuite asserts are left out (agents read
 //! those through ODS); a conflict with them is kept. The digest has a size
 //! budget; what does not fit is counted, and the agent is pointed to the tools.
 
@@ -12,6 +13,7 @@ use std::collections::BTreeSet;
 use onto_core::{Conflict, ConflictStatus, EntityView, Object, Property, Value, vocab};
 use onto_store::{ProposalStatus, Store};
 
+use crate::issues::{self, Scope};
 use crate::proposals;
 use crate::workspace::{Result, Workspace};
 
@@ -19,17 +21,20 @@ use crate::workspace::{Result, Workspace};
 pub struct DigestOptions {
     /// Longest digest in characters (about four per token).
     pub max_chars: usize,
+    /// List fixed known issues too, not only open ones.
+    pub fixed_issues: bool,
 }
 
 impl Default for DigestOptions {
     fn default() -> Self {
-        Self { max_chars: 16_000 }
+        Self { max_chars: 16_000, fixed_issues: false }
     }
 }
 
 /// Sections in the order they are filled, most useful first.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Section {
+    KnownIssues,
     Standards,
     Concepts,
     Assets,
@@ -40,6 +45,7 @@ enum Section {
 impl Section {
     fn title(self) -> &'static str {
         match self {
+            Section::KnownIssues => "Known issues",
             Section::Standards => "Standards and decisions",
             Section::Concepts => "Concepts",
             Section::Assets => "Models and other assets",
@@ -50,7 +56,8 @@ impl Section {
 
     fn of(view: &EntityView) -> Option<Section> {
         let types = view.entities(vocab::TYPE);
-        if types.iter().any(|t| *t == vocab::TYPE_TYPE || *t == vocab::PREDICATE_TYPE) {
+        // Known issues are listed by `issues`, which leaves out fixed ones.
+        if types.iter().any(|t| *t == vocab::TYPE_TYPE || *t == vocab::PREDICATE_TYPE || *t == issues::TYPE) {
             return None;
         }
         Some(if types.iter().any(|t| *t == "ModellingStandard" || *t == "Decision") {
@@ -172,10 +179,15 @@ pub fn render(workspace: &Workspace, store: &Store, options: &DigestOptions) -> 
     let sources = store.sources()?;
     let team = crate::compact::team_sources(workspace, store)?;
     let schema = workspace.schema(store)?;
-    let resolver = workspace.resolver(Some(crate::now_rfc3339()));
+    let now = crate::now_rfc3339();
+    let resolver = workspace.resolver(Some(now.clone()));
     let renderer = Renderer { team: &team };
 
     let mut entries: Vec<(Section, String)> = Vec::new();
+    let scope = if options.fixed_issues { Scope::All } else { Scope::Current(now) };
+    for issue in issues::known_issues(workspace, store, None, &scope)? {
+        entries.push((Section::KnownIssues, format!("- {}\n", issue.line)));
+    }
     for subject in store.subjects()? {
         let mut records = store.records_about(&subject)?;
         records.extend(proposals::pending_records(store, &subject)?);
