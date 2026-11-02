@@ -1,7 +1,8 @@
 name: Evaluate (does the ontology help?)
 
-# Runs evals/*.yaml under three conditions: OpenDataSuite tools only, ontology
-# tools only, and both. Manual. Any OpenAI-compatible endpoint works; presets
+# Runs evals/*.yaml under the recommended conditions: OpenDataSuite tools only,
+# ontology tools only, both, and OpenDataSuite tools with the context digest
+# (the digest without the ontology's tools). Manual. Any OpenAI-compatible endpoint works; presets
 # cover free options (provider rate limits and model lists change, so check
 # the provider's current documentation):
 #
@@ -42,7 +43,7 @@ on:
         required: false
       conditions:
         description: Conditions to compare, comma-separated; add +digest to give the context digest (e.g. both+digest)
-        default: ods_only,ontology_only,both
+        default: ods_only,ontology_only,both,ods_only+digest
       judge:
         description: Score judged criteria with the model (costs extra requests)
         type: boolean
@@ -55,6 +56,9 @@ on:
         type: choice
         options: [scripted, simulated]
         default: scripted
+      person_window:
+        description: What a simulated person rereads each reply. A number = its opening message plus that many latest messages; full = the whole conversation (costs more)
+        default: "4"
 
 permissions:
   contents: read
@@ -141,8 +145,9 @@ jobs:
           JUDGE: ${{ inputs.judge }}
           MAX_REQUESTS: ${{ inputs.max_requests }}
           HUMAN: ${{ inputs.human }}
+          PERSON_WINDOW: ${{ inputs.person_window }}
         run: |
-          ARGS=(--runs "$RUNS" --conditions "$CONDITIONS" --human "$HUMAN")
+          ARGS=(--runs "$RUNS" --conditions "$CONDITIONS" --human "$HUMAN" --person-window "${PERSON_WINDOW:-4}")
           if [ -n "$TASK" ]; then ARGS+=(--task "$TASK"); fi
           if [ "$JUDGE" != "true" ]; then ARGS+=(--no-judge); fi
           mkdir -p target/eval

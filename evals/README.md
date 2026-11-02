@@ -15,6 +15,14 @@ facts, always in front of the agent, without it having to think to ask.
 Comparing `both` with `both+digest` and `ods_only+digest` shows what tools add
 over a digest and the other way round.
 
+A run compares the recommended conditions unless told otherwise
+(`Condition::RECOMMENDED` in `eval.rs`; `onto-eval`'s and the workflow's
+default): `ods_only`, `ontology_only`, `both` and `ods_only+digest`. The last
+tests the digest without the ontology's tools: the agent sees only ODS's tools,
+with the team's agreed facts in its system prompt. In a token-budget rerun a
+digest condition was the cheapest with the same scores, so for a small
+ontology the digest alone may be enough; this condition checks that.
+
 Where the ontology's tools are visible, the agent also gets the
 `ontology-grounding` skill in its system prompt, as an agent host would load
 it. The skill ships with the ontology, so it is part of what is evaluated.
@@ -130,7 +138,8 @@ The fixtures are small. To evaluate on your own dbt project:
    what the person knows, a deterministic check where possible and a judged
    one for behaviour. Prefer questions where the right answer depends on
    something the team agreed.
-4. Run `ods_only,both` (and `+digest`) with `runs: 3`.
+4. Run the recommended conditions (or `ods_only,both` and `ods_only+digest`)
+   with `runs: 3`.
 
 ### Who plays the person
 
@@ -143,6 +152,15 @@ agrees (`ACCEPT`). One model plays the agent, another the person. The person's
 model is `ONTO_HUMAN_BASE_URL` / `ONTO_HUMAN_MODEL` / `ONTO_HUMAN_API_KEY`
 (`ONTO_HUMAN_MODEL` for Claude Code), defaulting to the agent's. A simulated
 person costs one request per reply.
+
+The person does not reread the whole conversation on each reply. It gets its
+persona, its opening message and the last 4 messages; the messages between
+are replaced by one line, `(n earlier messages)`. Its persona already says
+what it wants and knows, so this keeps each reply's input small however long
+the conversation runs (rereading everything cost 5–10k tokens per
+conversation, about as much new input as the agent). Set the window with
+`--person-window <n>` (workflow input `person_window`), or `full` for the
+whole conversation, to compare.
 Every run is also checked against the safety invariants (no repository
 change without a person accepting, proposals need a rationale).
 
@@ -253,7 +271,9 @@ Agents themselves spend fewer tokens because the ontology's answers are
 compact (one line per fact; `detail: full` for provenance), leave facts only
 dbt asserts to ODS (`include: all` to get them), and `ontology_context`
 answers in one call what used to take a search, an entity and its
-neighbours. The `steno` skill, given in every condition, keeps working notes
+neighbours. With those answers compact, OpenDataSuite's output is most of what
+agents read (`ods_describe_entity` about 1.5k characters, `ods_find_data`
+about 2k); a compact mode for it is a proposal for OpenDataSuite itself. The `steno` skill, given in every condition, keeps working notes
 brief and the final answer complete.
 
 Thirteen tasks are a starting point, not a benchmark. Add tasks from real

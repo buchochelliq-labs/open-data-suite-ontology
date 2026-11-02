@@ -5,6 +5,12 @@
 //! person sees only what a person would see (the messages, not tool calls),
 //! knows only what the persona says, and decides when it is satisfied and
 //! whether to accept a proposal. One model plays the agent, another the person.
+//!
+//! The person does not reread the whole conversation on every reply: by
+//! default it sees its opening message and the last [`DEFAULT_WINDOW`]
+//! messages, with those in between summarised as "(n earlier messages)"
+//! ([`PersonHistory`]). Its persona, in the system prompt, says what it wants
+//! and knows, so the middle of a long exchange is rarely needed.
 
 use anyhow::Result;
 use serde::Deserialize;
@@ -72,10 +78,54 @@ impl Persona {
     }
 }
 
+/// Messages a simulated person sees after its opening message, by default.
+pub const DEFAULT_WINDOW: usize = 4;
+
+/// How much of the conversation the simulated person sees on each reply.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PersonHistory {
+    /// Every message, as before windowing (for comparison; costs more).
+    Full,
+    /// The opening message and the last `n` messages (at least 1).
+    Window(usize),
+}
+
+impl Default for PersonHistory {
+    fn default() -> Self {
+        PersonHistory::Window(DEFAULT_WINDOW)
+    }
+}
+
+impl std::fmt::Display for PersonHistory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PersonHistory::Full => f.write_str("full"),
+            PersonHistory::Window(n) => write!(f, "{n}"),
+        }
+    }
+}
+
+impl std::str::FromStr for PersonHistory {
+    type Err = String;
+
+    /// `full`, or the number of latest messages to show (at least 1).
+    fn from_str(s: &str) -> Result<Self, String> {
+        let s = s.trim();
+        if s.eq_ignore_ascii_case("full") {
+            return Ok(PersonHistory::Full);
+        }
+        match s.parse::<usize>() {
+            Ok(n) if n > 0 => Ok(PersonHistory::Window(n)),
+            _ => Err(format!("invalid person history `{s}`: expected `full` or a number of messages of at least 1")),
+        }
+    }
+}
+
 /// A model playing the person.
 pub struct SimulatedHuman {
     persona: Persona,
     model: Agent,
+    history: PersonHistory,
     replies: usize,
     /// Who accepts proposals, recorded on the acceptance.
     pub accepted_by: String,
@@ -85,12 +135,19 @@ pub struct SimulatedHuman {
 
 impl SimulatedHuman {
     pub fn new(persona: Persona, model: Agent) -> Self {
-        Self { persona, model, replies: 0, accepted_by: "simulated-person".into(), usage: TokenUsage::default() }
+        Self { persona, model, history: PersonHistory::default(), replies: 0, accepted_by: "simulated-person".into(), usage: TokenUsage::default() }
+    }
+
+    /// How much of the conversation the person sees on each reply.
+    pub fn with_history(mut self, history: PersonHistory) -> Self {
+        self.history = history;
+        self
     }
 }
 
-/// The conversation as the person saw it: messages and their own actions, no tool calls.
-pub fn person_view(transcript: &Transcript) -> String {
+/// The messages a person saw, in order: theirs, the assistant's and their own
+/// actions, no tool calls.
+fn person_messages(transcript: &Transcript) -> Vec<String> {
     transcript
         .events
         .iter()
@@ -100,8 +157,33 @@ pub fn person_view(transcript: &Transcript) -> String {
             Event::HumanAction { action, detail } => Some(format!("(you did: {action} {detail})")),
             Event::ToolCall { .. } => None,
         })
-        .collect::<Vec<_>>()
-        .join("\n\n")
+        .collect()
+}
+
+/// The whole conversation as the person saw it.
+pub fn person_view(transcript: &Transcript) -> String {
+    person_view_with(transcript, PersonHistory::Full)
+}
+
+/// The conversation as the person sees it under `history`. With a window of
+/// `n`, the opening message and the last `n` messages are shown, and the
+/// messages between them are replaced by one line, "(k earlier messages)".
+/// Nothing is left out while the conversation fits in the window.
+pub fn person_view_with(transcript: &Transcript, history: PersonHistory) -> String {
+    let mut messages = person_messages(transcript);
+    if let PersonHistory::Window(n) = history {
+        let omitted = messages.len().saturating_sub(n + 1);
+        if omitted > 0 {
+            let plural = if omitted == 1 { "" } else { "s" };
+            messages.splice(1..1 + omitted, [format!("({omitted} earlier message{plural})")]);
+        }
+    }
+    messages.join("\n\n")
+}
+
+/// The request the person's model gets for its next reply.
+pub fn person_prompt(transcript: &Transcript, history: PersonHistory) -> String {
+    format!("The conversation so far:\n\n{}\n\nWrite your next message to the assistant, or DONE.", person_view_with(transcript, history))
 }
 
 /// Read the person model's answer: `DONE` ends, a leading `ACCEPT` line accepts.
@@ -124,7 +206,7 @@ impl Person for SimulatedHuman {
             return Ok(Reply::End);
         }
         self.replies += 1;
-        let prompt = format!("The conversation so far:\n\n{}\n\nWrite your next message to the assistant, or DONE.", person_view(transcript));
+        let prompt = person_prompt(transcript, self.history);
         let (text, usage) = ask(&self.model, &self.persona.system_prompt(), &prompt).await?;
         self.usage += usage;
         Ok(parse_reply(&text, self.persona.accepts_proposals, &self.accepted_by))

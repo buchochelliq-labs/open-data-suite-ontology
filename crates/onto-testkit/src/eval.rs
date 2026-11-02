@@ -8,6 +8,10 @@
 //! - `ontology_only`: the ontology's tools;
 //! - `both`: the combination this project is for.
 //!
+//! Each may add the context digest (`+digest`). [`Condition::RECOMMENDED`]
+//! is the default comparison: the three tool sets and `ods_only+digest`, the
+//! digest without the ontology's tools.
+//!
 //! The system prompt is the same everywhere, plus the instructions of the
 //! servers whose tools are visible. Where the ontology's tools are visible the
 //! agent also gets the `ontology-grounding` skill, as a host would load it:
@@ -27,7 +31,7 @@ use serde_json::{Value, json};
 
 use crate::agent::{EpisodeStats, ModelConfig, Reply, ScriptedHuman, TokenUsage, chat, complete, is_budget_exhausted, run_episode};
 use crate::fixture::{Fixture, fixture_not_built, ods_available, ods_binary};
-use crate::human::{Human, Persona, SimulatedHuman};
+use crate::human::{Human, PersonHistory, Persona, SimulatedHuman};
 use crate::invariants;
 use crate::session::Session;
 use crate::transcript::{Event, Transcript};
@@ -119,8 +123,16 @@ impl Condition {
     pub const ODS_ONLY: Condition = Condition { tools: Tools::Ods, digest: false };
     pub const ONTOLOGY_ONLY: Condition = Condition { tools: Tools::Ontology, digest: false };
     pub const BOTH: Condition = Condition { tools: Tools::Both, digest: false };
+    /// OpenDataSuite's tools with the context digest: what the digest adds
+    /// without the ontology's tools.
+    pub const ODS_ONLY_DIGEST: Condition = Condition { tools: Tools::Ods, digest: true };
 
-    fn prefixes(self) -> &'static [&'static str] {
+    /// The conditions a run compares unless told otherwise (`onto-eval`'s and
+    /// the Evaluate workflow's default).
+    pub const RECOMMENDED: [Condition; 4] = [Condition::ODS_ONLY, Condition::ONTOLOGY_ONLY, Condition::BOTH, Condition::ODS_ONLY_DIGEST];
+
+    /// Name prefixes of the MCP tools the agent sees.
+    pub fn prefixes(self) -> &'static [&'static str] {
         match self.tools {
             Tools::Ods => &["ods_"],
             Tools::Ontology => &["ontology_"],
@@ -128,11 +140,14 @@ impl Condition {
         }
     }
 
-    fn needs_ods(self) -> bool {
+    /// Whether OpenDataSuite's server is attached.
+    pub fn needs_ods(self) -> bool {
         self.tools != Tools::Ontology
     }
 
-    fn needs_ontology(self) -> bool {
+    /// Whether the ontology's server is attached (Claude Code). Our own loop
+    /// always starts it, for the workspace, and hides its tools when unused.
+    pub fn needs_ontology(self) -> bool {
         self.tools != Tools::Ods
     }
 
@@ -509,11 +524,13 @@ pub struct Cast<'a> {
     pub judge: Option<&'a Judge>,
     /// Plays the person for tasks with a persona; `None` uses scripted replies.
     pub person: Option<&'a Agent>,
+    /// How much of the conversation the simulated person sees on each reply.
+    pub person_history: PersonHistory,
 }
 
 impl<'a> Cast<'a> {
     pub fn new(agent: &'a Agent) -> Self {
-        Self { agent, judge: None, person: None }
+        Self { agent, judge: None, person: None, person_history: PersonHistory::default() }
     }
 }
 
@@ -632,7 +649,7 @@ async fn converse(
     script: Script<'_>,
 ) -> Result<(Result<EpisodeStats>, Transcript, TokenUsage)> {
     let mut human = match (script.persona, cast.person) {
-        (Some(persona), Some(model)) => Human::Simulated(Box::new(SimulatedHuman::new(persona.clone(), model.clone()))),
+        (Some(persona), Some(model)) => Human::Simulated(Box::new(SimulatedHuman::new(persona.clone(), model.clone()).with_history(cast.person_history))),
         _ => Human::Scripted(scripted(script.replies)),
     };
     // The digest is generated per session, so a later session sees what was accepted.
