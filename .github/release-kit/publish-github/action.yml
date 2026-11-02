@@ -1,0 +1,56 @@
+name: publish to GitHub Releases
+description: >-
+  Create the GitHub release on each selected package's tag, attach its files,
+  then download them again and check every `.sha256` against its file.
+inputs:
+  selection:
+    description: The gate's selection output.
+    required: true
+  dir:
+    description: >-
+      Where the build artifacts were downloaded (actions/download-artifact with
+      pattern `release--*`, not merged): each package's files are taken from
+      <dir>/release--<package>--*/.
+    default: dist
+  files:
+    description: A glob of files to attach instead (relative to the workspace); only for a single GitHub package.
+    default: ""
+  token:
+    description: A token with contents write on this repository.
+    default: ${{ github.token }}
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        GH_REPO: ${{ github.repository }}
+        SELECTION: ${{ inputs.selection }}
+        FILES: ${{ inputs.files }}
+        DIR: ${{ inputs.dir }}
+      run: |
+        set -euo pipefail
+        kit="$GITHUB_ACTION_PATH/../scripts/release.py"
+        python3 "$kit" preflight --registry github --selection "$SELECTION"
+        shopt -s nullglob
+        jq -r '.[] | select(.registry == "github") | "\(.name)\t\(.version)\t\(.tag)\t\(.slug)"' <<<"$SELECTION" |
+        while IFS=$'\t' read -r name version tag slug; do
+          # The input is a glob: expanding it is the point.
+          # shellcheck disable=SC2206
+          if [ -n "$FILES" ]; then files=( $FILES ); else files=( "$DIR"/release--"$slug"--*/* ); fi
+          if [ ${#files[@]} -eq 0 ]; then echo "::error::no files for $name (looked in $DIR/release--$slug--*/)"; exit 1; fi
+          prerelease=(); [[ "$version" == *-* ]] && prerelease=(--prerelease)
+          gh release view "$tag" >/dev/null 2>&1 ||
+            gh release create "$tag" --verify-tag --title "$name $version" --generate-notes "${prerelease[@]}"
+          gh release upload "$tag" "${files[@]}" --clobber
+          # Verify as a stranger would: download what the release now serves.
+          check="$(mktemp -d)"
+          gh release download "$tag" --dir "$check"
+          ( cd "$check" && for sum in *.sha256; do
+              [ -e "$sum" ] || continue
+              read -r digest file < "$sum"
+              echo "$digest  ${file#\*}" | sha256sum -c -
+            done )
+          echo "$name $version: published on $tag"
+        done
+        python3 "$kit" verify --registry github --selection "$SELECTION" --timeout 120

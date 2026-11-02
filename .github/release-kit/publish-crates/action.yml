@@ -1,0 +1,32 @@
+name: publish to crates.io
+description: >-
+  Publish the selected crates in RELEASES.toml order: refuse any already out,
+  package and verify them all with one dry run, upload, then wait until
+  crates.io serves every version.
+inputs:
+  selection:
+    description: The gate's selection output.
+    required: true
+  token:
+    description: >-
+      A crates.io token: the output of rust-lang/crates-io-auth-action
+      (Trusted Publishing, preferred), or a secret for a crate's first version.
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        SELECTION: ${{ inputs.selection }}
+        CARGO_REGISTRY_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        kit="$GITHUB_ACTION_PATH/../scripts/release.py"
+        python3 "$kit" preflight --registry crates.io --selection "$SELECTION"
+        mapfile -t crates < <(jq -r '.[] | select(.registry == "crates.io") | .name' <<<"$SELECTION")
+        args=(); for crate in "${crates[@]}"; do args+=(-p "$crate"); done
+        # Cargo publishes several packages of a workspace in dependency
+        # order, verifying each against the earlier ones' packages.
+        cargo publish --dry-run --locked "${args[@]}"
+        cargo publish --locked "${args[@]}"
+        python3 "$kit" verify --registry crates.io --selection "$SELECTION"

@@ -1,0 +1,46 @@
+name: publish to PyPI
+description: >-
+  Upload the built distributions with Trusted Publishing (the calling job
+  needs `id-token: write` and the PyPI publisher configured for the calling
+  workflow), then wait until PyPI serves the version.
+inputs:
+  selection:
+    description: The gate's selection output.
+    required: true
+  dir:
+    description: >-
+      Where the build artifacts were downloaded (pattern `release--*`, not
+      merged); the selected PyPI packages' wheels and sdists are taken from
+      <dir>/release--<package>--*/.
+    default: dist
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        SELECTION: ${{ inputs.selection }}
+      run: python3 "$GITHUB_ACTION_PATH/../scripts/release.py" preflight --registry pypi --selection "$SELECTION"
+    - id: gather
+      shell: bash
+      env:
+        SELECTION: ${{ inputs.selection }}
+        DIR: ${{ inputs.dir }}
+      run: |
+        set -euo pipefail
+        shopt -s nullglob
+        out="$RUNNER_TEMP/pypi-dist"
+        mkdir -p "$out"
+        for slug in $(jq -r '.[] | select(.registry == "pypi") | .slug' <<<"$SELECTION"); do
+          for file in "$DIR"/release--"$slug"--*/*; do
+            case "$file" in *.whl|*.tar.gz) cp "$file" "$out/" ;; esac
+          done
+        done
+        if [ -z "$(ls -A "$out")" ]; then echo "::error::no wheels or sdists in $DIR/release--<package>--*/"; exit 1; fi
+        echo "dir=$out" >> "$GITHUB_OUTPUT"
+    - uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: ${{ steps.gather.outputs.dir }}
+    - shell: bash
+      env:
+        SELECTION: ${{ inputs.selection }}
+      run: python3 "$GITHUB_ACTION_PATH/../scripts/release.py" verify --registry pypi --selection "$SELECTION"
