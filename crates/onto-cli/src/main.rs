@@ -121,7 +121,10 @@ fn init(root: &std::path::Path, central: Option<String>, central_path: String, a
             bail!("{} already exists (to connect agents, pass --agents)", config.display());
         }
         let text = std::fs::read_to_string(&config)?;
-        if !text.lines().any(|l| l.trim() == "[context]") {
+        // Parsed, not matched by text: `[ context ]` or a trailing comment
+        // is the same table, and a second one would break onto.toml.
+        let parsed: toml::Table = toml::from_str(&text).with_context(|| format!("{} is not valid TOML", config.display()))?;
+        if !parsed.contains_key("context") {
             std::fs::write(&config, format!("{}\n\n{}", text.trim_end(), context_section()))?;
         }
         onto_workspace::local::ignore_state_dir(root)?;

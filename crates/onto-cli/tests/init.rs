@@ -57,6 +57,20 @@ fn init_connects_every_agent_and_sync_writes_the_digest() {
     assert!(read(root, ".gitignore").contains(".onto/"), "the digest is per person and never committed");
 }
 
+/// Codex review: a `[context]` table spelled differently is still the table.
+#[test]
+fn an_existing_context_table_is_recognised_however_it_is_written() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path();
+    onto(root, &["init"]);
+    let text = read(root, "onto.toml").replace("[context]", "[ context ] # agent digest");
+    std::fs::write(root.join("onto.toml"), text).unwrap();
+    onto(root, &["init", "--agents", "generic"]);
+    let text = read(root, "onto.toml");
+    assert_eq!(text.matches("context ]").count() + text.matches("[context]").count(), 1, "{text}");
+    onto(root, &["status"]);
+}
+
 #[test]
 fn init_on_an_existing_workspace_needs_agents() {
     let dir = tempfile::tempdir().unwrap();
