@@ -3,12 +3,13 @@ name: release
 # Prebuilt `onto` binaries for Linux, macOS and Windows, released with the
 # buchochelliq-labs standard (https://github.com/buchochelliq-labs/release-kit).
 #
-# On main, after the release PR merges: `python3 ../release-kit/scripts/release.py tag`.
-# It pushes the annotated tags v<version> (the GitHub release's tag, a record)
+# What is built and published is declared in release-kit.yml. On main, after
+# the release PR merges: `python3 ../release-kit/scripts/release.py tag`. It
+# pushes the annotated tags v<version> (the GitHub release's tag, a record)
 # and release-<version>, which starts this run: the gate checks the tag once,
-# CI reruns on the tagged commit, the binaries are built from it, and the
-# archives and their SHA-256 are attached to the release, then downloaded
-# again and checked. A failed run is finished by running `release.py tag`
+# CI reruns on the tagged commit, release-kit builds the declared artifacts
+# from it, and the archives and their SHA-256 are attached to the release,
+# then downloaded again and checked. A failed run is finished by running `release.py tag`
 # again. Dispatching an existing release tag reruns it.
 
 on:
@@ -27,9 +28,6 @@ concurrency:
   # One release at a time; never cancel one that may be half published.
   group: release
   cancel-in-progress: false
-
-env:
-  CARGO_TERM_COLOR: always
 
 jobs:
   gate:
@@ -56,55 +54,14 @@ jobs:
     with:
       ref: ${{ needs.gate.outputs.sha }}
 
+  # Builds what release-kit.yml declares (onto for five targets) from the
+  # tagged commit.
   build:
     needs: [gate, ci]
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu, archive: tar.gz }
-          - { os: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu, archive: tar.gz }
-          - { os: macos-latest, target: aarch64-apple-darwin, archive: tar.gz }
-          # Intel macOS is cross-compiled on Apple Silicon: GitHub retired
-          # the macos-13 Intel runners in December 2025.
-          - { os: macos-latest, target: x86_64-apple-darwin, archive: tar.gz }
-          - { os: windows-latest, target: x86_64-pc-windows-msvc, archive: zip }
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.gate.outputs.sha }}
-          persist-credentials: false
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - run: cargo build --release --locked -p onto-cli --target ${{ matrix.target }}
-      - name: Package
-        shell: bash
-        env:
-          VERSION: ${{ needs.gate.outputs.release }}
-          TARGET: ${{ matrix.target }}
-          ARCHIVE: ${{ matrix.archive }}
-        run: |
-          name="onto-v$VERSION-$TARGET"
-          mkdir -p "dist/$name"
-          bin="target/$TARGET/release/onto"
-          [ "$ARCHIVE" = zip ] && bin="$bin.exe"
-          cp "$bin" README.md "dist/$name/"
-          cd dist
-          if [ "$ARCHIVE" = zip ]; then
-            7z a -bd "$name.zip" "$name" > /dev/null
-            sha256sum "$name.zip" > "$name.zip.sha256"
-          else
-            tar -czf "$name.tar.gz" "$name"
-            shasum -a 256 "$name.tar.gz" > "$name.tar.gz.sha256"
-          fi
-          rm -rf "$name"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: onto-${{ matrix.target }}
-          path: dist/*
-          if-no-files-found: error
+    uses: buchochelliq-labs/release-kit/.github/workflows/build.yml@v1
+    with:
+      sha: ${{ needs.gate.outputs.sha }}
+      selection: ${{ needs.gate.outputs.selection }}
 
   # The only job that can write: it creates the release on v<version> and
   # attaches the archives the build jobs produced.
@@ -121,9 +78,8 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
+          pattern: release--*
           path: dist
-          merge-multiple: true
       - uses: buchochelliq-labs/release-kit/publish-github@v1
         with:
           selection: ${{ needs.gate.outputs.selection }}
-          files: dist/*
