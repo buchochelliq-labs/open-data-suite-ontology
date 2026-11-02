@@ -1,0 +1,38 @@
+name: release build
+description: >-
+  Build one planned job (a matrix entry of the plan) into dist/, with a
+  .sha256 beside every file for GitHub Releases. Sets up what the kind needs:
+  Rust, Node or maturin.
+inputs:
+  job:
+    description: The matrix entry, as JSON (toJSON(matrix)).
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+    - if: fromJSON(inputs.job).kind == 'rust-binary'
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ fromJSON(inputs.job).target }}
+    - if: fromJSON(inputs.job).kind == 'vsix'
+      uses: actions/setup-node@v4
+      with:
+        node-version: "24"
+    - if: fromJSON(inputs.job).kind == 'maturin'
+      uses: PyO3/maturin-action@v1
+      with:
+        target: ${{ fromJSON(inputs.job).target }}
+        args: --release --out dist -m ${{ fromJSON(inputs.job).cargo }}
+        manylinux: auto
+    - if: fromJSON(inputs.job).kind == 'maturin-sdist'
+      uses: PyO3/maturin-action@v1
+      with:
+        command: sdist
+        args: --out dist -m ${{ fromJSON(inputs.job).cargo }}
+    - shell: bash
+      env:
+        JOB: ${{ inputs.job }}
+      run: python3 "$GITHUB_ACTION_PATH/../scripts/release.py" build --job "$JOB" --out dist

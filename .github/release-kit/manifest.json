@@ -1,0 +1,17 @@
+{
+  "source": "buchochelliq-labs/release-kit",
+  "version": "3add634",
+  "commit": "3add6345bc2ea5158e3e2b50d775c3517c017a12",
+  "files": {
+    ".github/release-kit/build/action.yml": "56ab88d0de5a843e417a5eb9db08deec32f2241ee6bf2a0e96bbc49d6598ca1e",
+    ".github/release-kit/gate/action.yml": "c107a54828b93756f3a3692bb2bc2663a24fef95f50c08f8c90bccd1596ea517",
+    ".github/release-kit/plan/action.yml": "ce5b399c6bde25d3060503ad4b8e97754aa406a377b7834f98bd4756db7eb7c5",
+    ".github/release-kit/publish-crates/action.yml": "f916414e49224aae9e5d81365aef7669071a2681695c0dbf2775ee2ff070ff9f",
+    ".github/release-kit/publish-github/action.yml": "36fd737ace9d7ff586a1ad5b649ed83aa52ed77e29d4f290da28a3e63d6e2cd0",
+    ".github/release-kit/publish-npm/action.yml": "ab94a81c13b6043c88df50553d323e9bee3eab098766bba2c29ee56aafaba885",
+    ".github/release-kit/publish-pypi/action.yml": "073df57f843fec4ce4fb507c80ac0466d1ad03ca0fbea1e9f58f1ce963fb8aca",
+    ".github/release-kit/publish-vscode/action.yml": "0122ec4605dbd9219dbd4a1ff077f10d3582787c33d602f9bda36c3fa5eb5a88",
+    ".github/release-kit/scripts/release.py": "1ff1b295cc84e4a21d9def749489f932a308eb24340284223a35e1945eb680f3",
+    ".github/workflows/release-kit-build.yml": "7fc902c2488bf58b6fc336bcf84847a83f9b39249a717c2c3e724444f50f3173"
+  }
+}

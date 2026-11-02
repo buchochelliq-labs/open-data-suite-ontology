@@ -3,8 +3,9 @@ name: release
 # Prebuilt `onto` binaries for Linux, macOS and Windows, released with the
 # buchochelliq-labs standard (https://github.com/buchochelliq-labs/release-kit).
 #
-# What is built and published is declared in release-kit.yml. On main, after
-# the release PR merges: `python3 ../release-kit/scripts/release.py tag`. It
+# What is built and published is declared in release-kit.yml; the kit itself is
+# the installed copy in .github/release-kit/. On main, after the release PR
+# merges: `python3 .github/release-kit/scripts/release.py tag`. It
 # pushes the annotated tags v<version> (the GitHub release's tag, a record)
 # and release-<version>, which starts this run: the gate checks the tag once,
 # CI reruns on the tagged commit, release-kit builds the declared artifacts
@@ -43,7 +44,7 @@ jobs:
           fetch-depth: 0
           ref: refs/tags/${{ inputs.tag || github.ref_name }}
       - id: gate
-        uses: buchochelliq-labs/release-kit/gate@v1
+        uses: ./.github/release-kit/gate
         with:
           tag: ${{ inputs.tag || github.ref_name }}
 
@@ -58,7 +59,7 @@ jobs:
   # tagged commit.
   build:
     needs: [gate, ci]
-    uses: buchochelliq-labs/release-kit/.github/workflows/build.yml@v1
+    uses: ./.github/workflows/release-kit-build.yml
     with:
       sha: ${{ needs.gate.outputs.sha }}
       selection: ${{ needs.gate.outputs.selection }}
@@ -80,6 +81,6 @@ jobs:
         with:
           pattern: release--*
           path: dist
-      - uses: buchochelliq-labs/release-kit/publish-github@v1
+      - uses: ./.github/release-kit/publish-github
         with:
           selection: ${{ needs.gate.outputs.selection }}

@@ -42,6 +42,11 @@ jobs:
           python-version: "3.12"
       # OpenDataSuite for the onto-ods integration test (pinned like ods-erd).
       - run: pip install opendatasuite==0.0.2
+      # The release configuration matches the manifests, and the installed
+      # release-kit copy is unmodified (it changes only by installing again).
+      - run: pip install pyyaml
+      - run: python3 .github/release-kit/scripts/release.py check
+      - run: python3 .github/release-kit/scripts/release.py vendored
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features
       # Tier 1 (scripted scenarios, replay, asset checks) and the model loop
