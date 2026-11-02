@@ -19,11 +19,15 @@ use rmcp::{Json, ServerHandler, ServiceExt, tool, tool_handler, tool_router};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+mod overview;
+pub use overview::{Health, OverviewRequest, OverviewResponse};
+
 pub const INSTRUCTIONS: &str = "\
 The team's agreed facts about its data: definitions, grain, ownership, relationships and decisions, \
 including facts the dbt code and tests do not show. Before answering a design or query question, look up \
 the models and concepts involved: ontology_context takes dbt node ids (model.<project>.<name>) or words and \
-returns their facts and relationships in one call; ontology_entity gives one entity in detail. Answers are \
+returns their facts and relationships in one call; ontology_entity gives one entity in detail. When a search \
+finds nothing or the domain is unfamiliar, ontology_overview shows what kinds of things are recorded. Answers are \
 compact by default and, when OpenDataSuite is configured, leave out facts only dbt asserts (ask ODS for those). \
 Cite each fact's source and authority. Report unresolved conflicts and ask; never pick a winner. \
 Mention the open known issues listed for the entities you use; fixed ones are left out unless asked for. \
@@ -277,6 +281,18 @@ impl OntologyServer {
         Ok(workspace.resolver(Some(as_of.unwrap_or_else(now_rfc3339))).resolve_entity(id, &records, &schema))
     }
 
+    /// Loaded sources, versions shortened to 12 characters.
+    fn sources(store: &Store) -> Result<Vec<SourceState>, String> {
+        let mut sources = store.sources().map_err(err)?;
+        for source in &mut sources {
+            if let Some(version) = &mut source.version {
+                let short: String = version.trim_start_matches("sha256:").chars().take(12).collect();
+                *version = short;
+            }
+        }
+        Ok(sources)
+    }
+
     /// `include`, or by default the team's facts when ODS can serve the rest.
     fn include(workspace: &Workspace, include: Option<Include>) -> Include {
         include.unwrap_or(if compact::has_ods_source(workspace) { Include::Team } else { Include::All })
@@ -295,15 +311,8 @@ impl OntologyServer {
     )]
     pub async fn ontology_status(&self) -> Result<Json<StatusResponse>, String> {
         self.with_store(|ws, store| {
-            let mut sources = store.sources().map_err(err)?;
-            for source in &mut sources {
-                if let Some(version) = &mut source.version {
-                    let short: String = version.trim_start_matches("sha256:").chars().take(12).collect();
-                    *version = short;
-                }
-            }
             Ok(Json(StatusResponse {
-                sources,
+                sources: Self::sources(store)?,
                 resolution_mode: ws.resolution_mode(),
                 priority: ws.config.resolution.priority.clone(),
                 pending_proposals: store.proposals(Some(ProposalStatus::Pending)).map_err(err)?.len(),
@@ -311,6 +320,27 @@ impl OntologyServer {
                 sync_scope: SYNC_SCOPE.into(),
                 notice: NOTICE.into(),
             }))
+        })
+    }
+
+    #[tool(
+        description = "What the graph contains: each type with its count and definition, each predicate with the types it links, the most connected concepts with labels and aliases, modelling standards, and loaded sources. Call it when a search finds nothing or the domain is unfamiliar.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    pub async fn ontology_overview(&self, Parameters(req): Parameters<OverviewRequest>) -> Result<Json<OverviewResponse>, String> {
+        self.with_store(|ws, store| {
+            let resolution = match ws.resolution_mode() {
+                ResolutionMode::Priority => format!("conflicts settled by source priority: {}", ws.config.resolution.priority.join(" > ")),
+                ResolutionMode::Preserve => "conflicts stay unresolved (preserve mode)".to_string(),
+            };
+            let health = Health {
+                sources: Self::sources(store)?.iter().map(overview::source_line).collect(),
+                resolution,
+                pending_proposals: store.proposals(Some(ProposalStatus::Pending)).map_err(err)?.len(),
+                disabled_sources: ws.disabled.clone(),
+                sync_scope: SYNC_SCOPE.into(),
+            };
+            overview::overview(ws, store, health, req).map(Json)
         })
     }
 

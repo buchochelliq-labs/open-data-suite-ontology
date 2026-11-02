@@ -17,4 +17,4 @@ criteria:
       context (rather than inventing one or asserting a grain), and ask the user or
       suggest where refund data might come from?
   - id: searched
-    called_any: [ontology_search, ods_search, ods_find_data]
+    called_any: [ontology_search, ontology_overview, ods_search, ods_find_data]

@@ -19,4 +19,4 @@ criteria:
       rather than presenting a definition as the team's? Suggesting one is fine only when it
       is clearly a suggestion to confirm with the team.
   - id: searched
-    called_any: [ontology_search, ontology_context, ods_search, ods_find_data]
+    called_any: [ontology_search, ontology_overview, ontology_context, ods_search, ods_find_data]

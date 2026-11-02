@@ -11,6 +11,15 @@ steps:
       - { path: /disabled_sources, equals: [] }
       - { path: /sync_scope, contains: "Teammates sync independently" }
 
+  # What kinds of things are recorded, for when a search finds nothing.
+  - call: ontology_overview
+    expect:
+      - { path: /types, contains: "BusinessConcept (5)" }
+      - { path: /predicates, contains: "represents: DataAsset → BusinessConcept (1)" }
+      - { path: /concepts/0, contains: "represented by: model.shop.fct_orders" }
+      - { path: /standards/0, contains: "standard:model-naming" }
+      - { path: /health/sources/0, contains: "central: central layer" }
+
   # Aliases from the central pack make "client" find the customer concept.
   - call: ontology_search
     args: { query: client }

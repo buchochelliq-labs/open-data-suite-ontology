@@ -69,6 +69,11 @@ Besides looking up a named model, some tasks only pass if the agent explores:
 | `order-history-unnamed` | The person says "order history"; the model is `order_events` |
 | `naming-standard` | A central standard the question doesn't mention, which the project's own model names don't follow |
 
+When a search finds nothing, the skill points the agent to `ontology_overview`
+(types, predicates, main concepts with the models that represent them,
+standards); `order-history-unnamed` and `revenue-definition-paraphrase` measure
+whether that helps.
+
 The report adds an exploration table per condition (tool calls, entities
 looked up, characters of tool output read) and lists every search that found
 nothing, so vocabulary misses are visible. They decide whether semantic search
