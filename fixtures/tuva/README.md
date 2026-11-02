@@ -21,8 +21,13 @@ The four `tuva-*` tasks in `evals/` ask about these.
 ## Building the manifest
 
 The manifest is not committed. `build.sh` clones Tuva at a pinned commit,
-installs dbt with DuckDB and runs `dbt parse` on Tuva's integration project
-(core package only), then copies `manifest.json` into `target/`.
+installs dbt with DuckDB and runs `dbt compile` on Tuva's integration project
+(core package only), then copies `manifest.json` into `target/`. Compiling,
+rather than only parsing, puts each model's compiled SQL in the manifest, so
+ODS can read the joins between Tuva's models instead of treating every model
+as opaque. Compile connects to an empty local DuckDB file but runs nothing:
+no models, seeds (Tuva's terminology data is not loaded) or hooks. The script
+fails if any enabled model lacks compiled SQL.
 
 This runs Tuva's dbt code (its macros and its dbt_utils dependency), so it
 runs in its own job: `.github/workflows/tuva-fixture.yml`. That job has no

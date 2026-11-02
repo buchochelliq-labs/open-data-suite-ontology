@@ -3,10 +3,6 @@ entities:
   - id: model.acme.fct_mrr
     properties:
       grain: one row per account per calendar month in which the account had MRR, or lost it
-      known_issue: >-
-        A plan change that Stripe records as one subscription cancelled before
-        month end and another started in the next month shows as churn followed
-        by reactivation, instead of contraction or expansion. Ticket DATA-412.
     relations:
       - { predicate: represents, target: concept:mrr }
       - { predicate: represents, target: concept:mrr_movement }

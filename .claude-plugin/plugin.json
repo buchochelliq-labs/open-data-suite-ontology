@@ -7,6 +7,7 @@
     "name": "buchochelliq-labs"
   },
   "repository": "https://github.com/buchochelliq-labs/open-data-suite-ontology",
+  "license": "Apache-2.0",
   "mcpServers": {
     "onto": {
       "command": "onto",

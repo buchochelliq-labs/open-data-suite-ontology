@@ -57,8 +57,10 @@ Releases follow the buchochelliq-labs standard,
 [release-kit](https://github.com/buchochelliq-labs/release-kit): `release-kit.yml`
 says what is published and built, and `release.py tag` on `main` starts the release.
 
-Agents can read (`ontology_status`, `ontology_search`, `ontology_entity`,
-`ontology_neighbors`, `ontology_context`) and propose (`ontology_propose`).
+Agents can read (`ontology_status`, `ontology_overview`, `ontology_search`,
+`ontology_entity`, `ontology_neighbors`, `ontology_context`) and propose
+(`ontology_propose`). `ontology_overview` shows what the graph contains (types,
+predicates, main concepts, standards, sources) for when a search finds nothing.
 They cannot sync, accept or write files. Agents only learn from tools they
 think to call, so they also get a digest of the team's agreed facts to read up
 front: `onto init` sets `[context] path = ".onto/context.md"` in `onto.toml`,
@@ -128,4 +130,9 @@ and both, scored by checks and a judge model (`onto-eval`, or the manual
 ## Status
 
 First slice. See [docs/MIGRATION.md](docs/MIGRATION.md) for what has been ported
-from dbt-skills and what has not. No license has been chosen yet.
+from dbt-skills and what has not.
+
+## License
+
+Apache License 2.0: see [LICENSE](LICENSE). OpenDataSuite, which `onto` builds on,
+is also Apache-2.0.

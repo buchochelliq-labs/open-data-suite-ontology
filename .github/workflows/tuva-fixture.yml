@@ -1,7 +1,8 @@
 name: Tuva fixture
 
-# Builds the Tuva fixture's dbt manifest (fixtures/tuva/build.sh) and uploads
-# it as the `tuva-manifest` artifact. CI and the evaluation call this as a
+# Builds the Tuva fixture's dbt manifest (fixtures/tuva/build.sh: `dbt compile`
+# against an empty local DuckDB file, so models carry their compiled SQL) and
+# uploads it as the `tuva-manifest` artifact. CI and the evaluation call this as a
 # separate job and download the artifact.
 #
 # build.sh runs third-party code: Tuva's dbt project and its dbt_utils
@@ -34,7 +35,7 @@ jobs:
         if: steps.cache.outputs.cache-hit != 'true'
         with:
           python-version: "3.12"
-      - name: Build the manifest
+      - name: Compile the manifest
         if: steps.cache.outputs.cache-hit != 'true'
         run: fixtures/tuva/build.sh
         env:

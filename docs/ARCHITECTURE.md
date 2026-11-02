@@ -42,6 +42,15 @@ every source. On a single-valued predicate, distinct values form a conflict:
 - `proposed` claims appear under `pending` and never as values.
 - `as_of` filters by claim validity (defaults to now in the MCP server).
 
+Known issues (`KnownIssue` entities in the core schema) have a lifecycle:
+`status` (open, fixed, wont_fix), `ticket`, `since`, `fixed_in`, `workaround`,
+and `affects` relations to assets or columns whose `valid` range is when the
+issue affected them. The digest and `ontology_context` list the issues on the
+entities they show that are not fixed and affect them now, under "Known
+issues", never as relationships to follow; fixed ones only when asked
+(`--fixed-issues`, `known_issues: all`), and `ontology_entity` with `as_of`
+lists the issues that applied then.
+
 Cardinality comes from `onto:cardinality` claims, then built-ins. Otherwise
 literal-valued predicates are single-valued and relations are multi-valued.
 
@@ -61,7 +70,7 @@ Why per person:
   check is bypassed by a teammate's copy.
 - **Nothing synced is committed.** Shared files such as accepted proposals refer
   to external facts by id (`model.jaffle_ods.orders`). They never copy them.
-- **Freshness is visible.** `ontology_status` shows each source's `synced_at` and
+- **Freshness is visible.** `ontology_status` (and `ontology_overview`) shows each source's `synced_at` and
   version, and tells the agent that teammates sync independently.
 
 Consistency comes from the shared configuration: `onto.lock` pins central

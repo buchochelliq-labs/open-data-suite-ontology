@@ -68,6 +68,12 @@ fn copy_dir(from: &Path, to: &Path) -> Result<()> {
 impl Fixture {
     /// Copy `fixtures/<name>` and sync it.
     pub fn new(name: &str) -> Result<Self> {
+        Self::with_overlay(name, None)
+    }
+
+    /// Copy `fixtures/<name>`, copy `overlay`'s files over it (a variant of
+    /// the fixture, e.g. one fact changed), and sync it.
+    pub fn with_overlay(name: &str, overlay: Option<&Path>) -> Result<Self> {
         let dir = tempfile::tempdir()?;
         let central = dir.path().join("central");
         copy_dir(&repo_root().join("packs"), &central.join("packs"))?;
@@ -77,6 +83,12 @@ impl Fixture {
 
         let root = dir.path().join("workspace");
         copy_dir(&repo_root().join("fixtures").join(name), &root)?;
+        if let Some(overlay) = overlay {
+            if !overlay.is_dir() {
+                bail!("fixture overlay {} is not a directory", overlay.display());
+            }
+            copy_dir(overlay, &root)?;
+        }
         let config = root.join("onto.toml");
         let text = std::fs::read_to_string(&config)?
             .replace("REPLACED_BY_TESTKIT", &central.to_string_lossy())

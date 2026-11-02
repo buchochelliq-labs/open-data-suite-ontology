@@ -1,0 +1,23 @@
+# The saas fixture's known_issues.yaml after DATA-412 was fixed: the issue is
+# kept for history, `fixed`, and `affects` fct_mrr only until the fix. The
+# fixture's data still shows the April 2026 plan change as churn: a month
+# before the fix.
+entities:
+  - id: issue:DATA-412
+    type: KnownIssue
+    label: Plan changes show as churn and reactivation
+    definition: >-
+      A plan change that Stripe records as one subscription cancelled before
+      month end and another started in the next month shows in fct_mrr as churn
+      followed by reactivation, instead of contraction or expansion.
+    properties:
+      status: fixed
+      ticket: DATA-412
+      since: "2026-01-01"
+      fixed_in: "2026-06-01"
+    relations:
+      - { predicate: affects, target: model.acme.fct_mrr, valid: { from: "2026-01-01", until: "2026-06-01" } }
+    rationale: >-
+      Found when April 2026 churn was misreported to the board; fixed on
+      2026-06-01. Months from June 2026 are correct; earlier months were not
+      rebuilt.

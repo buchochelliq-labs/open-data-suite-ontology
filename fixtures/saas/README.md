@@ -28,8 +28,9 @@ shows in `fct_mrr` as churn in April and reactivation in May.
 - `concepts.yaml`: account, paying customer, MRR and its movements, active
   user and DAU, the money-columns standard, and the decision to retire
   `mrr_legacy`.
-- `assets.yaml`: grains, which model represents or measures which concept, owners,
-  and `fct_mrr`'s known issue (DATA-412).
+- `assets.yaml`: grains, which model represents or measures which concept, and owners.
+- `known_issues.yaml`: `fct_mrr`'s known issue DATA-412, open (a `KnownIssue`
+  that `affects` the model). `evals/overlays/saas-data412-fixed` has it fixed.
 - `finance.yaml` and `sales.yaml`: two ARR definitions that disagree, left
   unresolved.
 

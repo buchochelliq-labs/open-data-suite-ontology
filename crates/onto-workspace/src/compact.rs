@@ -162,7 +162,7 @@ pub fn facts(view: &EntityView, relations: bool, keep: impl Fn(&Value) -> bool) 
     Facts { lines, omitted }
 }
 
-/// A one-line summary for search hits: types, definition and grain, shortened.
+/// A one-line summary for search hits: definition, grain and status, shortened.
 pub fn summary(view: &EntityView) -> Option<String> {
     let clip = |s: &str, n: usize| if s.chars().count() > n { format!("{}…", s.chars().take(n).collect::<String>()) } else { s.to_string() };
     let mut parts = Vec::new();
@@ -172,6 +172,10 @@ pub fn summary(view: &EntityView) -> Option<String> {
     }
     if let Some(grain) = view.text("grain") {
         parts.push(format!("grain: {}", clip(grain, 80)));
+    }
+    // A known issue's state, so a fixed one is not read as open.
+    if let Some(status) = view.text(crate::issues::STATUS) {
+        parts.push(format!("status: {}", clip(status, 40)));
     }
     (!parts.is_empty()).then(|| parts.join("; "))
 }

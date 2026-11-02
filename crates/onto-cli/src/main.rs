@@ -70,6 +70,9 @@ enum Command {
         /// Longest digest in characters (about four per token).
         #[arg(long, default_value_t = 16_000)]
         max_chars: usize,
+        /// List fixed known issues too (by default only open ones).
+        #[arg(long)]
+        fixed_issues: bool,
         /// Write here instead of standard output.
         #[arg(long)]
         out: Option<std::path::PathBuf>,
@@ -215,7 +218,7 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             // digest still reflects the best facts available.
             if let Some(path) = &workspace.config.context.path {
                 let max_chars = workspace.config.context.max_chars.unwrap_or_else(|| onto_workspace::digest::DigestOptions::default().max_chars);
-                let digest = onto_workspace::digest::render(&workspace, &store, &onto_workspace::digest::DigestOptions { max_chars })?;
+                let digest = onto_workspace::digest::render(&workspace, &store, &onto_workspace::digest::DigestOptions { max_chars, ..Default::default() })?;
                 let target = workspace.root.join(path);
                 if let Some(dir) = target.parent() {
                     std::fs::create_dir_all(dir)?;
@@ -257,8 +260,8 @@ async fn run(cli: Cli) -> Result<ExitCode> {
             let view = workspace.resolver(Some(as_of.unwrap_or_else(now_rfc3339))).resolve_entity(&id, &records, &workspace.schema(&store)?);
             print_json(&view)?;
         }
-        Command::Context { max_chars, out } => {
-            let digest = onto_workspace::digest::render(&workspace, &store, &onto_workspace::digest::DigestOptions { max_chars })?;
+        Command::Context { max_chars, fixed_issues, out } => {
+            let digest = onto_workspace::digest::render(&workspace, &store, &onto_workspace::digest::DigestOptions { max_chars, fixed_issues })?;
             match out {
                 Some(path) => {
                     std::fs::write(&path, &digest)?;
