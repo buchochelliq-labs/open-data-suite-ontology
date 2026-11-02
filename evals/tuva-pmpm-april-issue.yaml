@@ -1,0 +1,25 @@
+name: tuva-pmpm-april-issue
+fixture: tuva
+# Real project (Tuva), made-up team issue. RB-204 is recorded on
+# core__member_month, not on core__cost, which the person asks about. core__cost
+# is built from core__member_month (ODS lineage shows it), so the agent has to
+# follow that link, or read the digest, to find the open issue.
+prompt: >-
+  I'm putting the monthly PMPM for January to June 2026 from core__cost into the
+  board pack. Is there anything about these months I need to flag?
+replies:
+  - Is the April figure usable as it is?
+persona:
+  role: finance analyst at a health plan preparing the board pack
+  goal: know which monthly PMPM figures need a caveat
+  knows:
+    - The plan uses the Tuva Project for its claims data.
+    - You have not heard of any problem with April.
+criteria:
+  - id: grounded
+    called_any: [ontology_context, ontology_entity]
+  - id: flags_april
+    judge: >-
+      Does the assistant flag that April 2026 PMPM is overstated or not comparable because
+      member months for April 2026 are short (the commercial eligibility file was truncated,
+      open issue RB-204 on core__member_month), and give the workaround or say to caveat it?

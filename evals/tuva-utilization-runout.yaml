@@ -1,0 +1,27 @@
+name: tuva-utilization-runout
+fixture: tuva
+# Real project (Tuva). The team marked claims models as subject to the
+# three-month run-out, not core__utilization. core__utilization counts
+# encounters built from claims (encounter_source_type = 'claim'), so the
+# run-out reaches it through its lineage.
+prompt: >-
+  I need emergency department visits per 1,000 members by month from
+  core__utilization, up to last month, for the quality committee. Can you write
+  the query?
+replies:
+  - The committee wants the most recent months. Can I leave them in?
+persona:
+  role: analyst preparing the quality committee's utilization report
+  goal: an ED visits per 1,000 trend query up to last month
+  knows:
+    - You don't know how quickly claims arrive.
+criteria:
+  - id: runout_reaches_utilization
+    judge: >-
+      Does the assistant say the latest three complete months of core__utilization are
+      incomplete because its encounters come from claims, which have a three-month run-out
+      (the team's rule), and exclude those months or label them preliminary?
+  - id: per_thousand
+    judge: >-
+      Does the query divide emergency department visits by member months (or members) and
+      multiply by 1,000 (or 12,000 for an annualised rate), per month?
