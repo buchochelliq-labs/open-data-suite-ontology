@@ -26,20 +26,41 @@ onto search customer
 onto show concept:customer                    # resolved values, provenance, conflicts
 ```
 
-Connect an agent (VS Code / Copilot, Claude Code, any MCP host):
-
-```json
-{ "servers": { "onto": { "command": "onto", "args": ["--root", "${workspaceFolder}", "mcp"] } } }
-```
-
-Agents can read (`ontology_status`, `ontology_search`, `ontology_entity`,
-`ontology_neighbors`) and propose (`ontology_propose`). They cannot sync,
-accept or write files. Agents only learn from tools they think to call, so also give
-them a digest of the team's agreed facts to read up front:
+Connect your coding agents in one step:
 
 ```sh
-onto context --out skills/ontology-grounding/references/context.md   # or AGENTS.md
+onto init --agents claude-code,copilot,generic   # also works after onto init
 ```
+
+- **Claude Code:** `.mcp.json` with the `onto` server (and `ods` for a dbt
+  project), the `ontology-grounding` and `steno` skills in `.claude/skills/`, and
+  `CLAUDE.md` importing your digest.
+- **Copilot:** `.vscode/mcp.json`, the agent in `.github/agents/`, the skills
+  in `.github/skills/`, and a pointer in `.github/copilot-instructions.md`.
+- **Generic:** a section in `AGENTS.md` naming the MCP servers and the CLI
+  fallback.
+
+Commit those files. Re-running is safe: MCP configs are merged and onto's
+Markdown sections are replaced.
+
+For Claude Code there is also a plugin with the same servers, skills and
+agent (it needs `onto` and `ods` on PATH):
+
+```
+/plugin marketplace add buchochelliq-labs/open-data-suite-ontology
+/plugin install onto@open-data-suite-ontology
+```
+
+Prebuilt `onto` binaries for Linux, macOS and Windows are attached to each
+[release](https://github.com/buchochelliq-labs/open-data-suite-ontology/releases).
+
+Agents can read (`ontology_status`, `ontology_search`, `ontology_entity`,
+`ontology_neighbors`, `ontology_context`) and propose (`ontology_propose`).
+They cannot sync, accept or write files. Agents only learn from tools they
+think to call, so they also get a digest of the team's agreed facts to read up
+front: `onto init` sets `[context] path = ".onto/context.md"` in `onto.toml`,
+and every `onto sync` rewrites it (`onto context --out <file>` writes one by
+hand).
 
 The digest is generated per person from their synced store (like the store,
 don't commit it unless your team chooses to), stays within a size budget
@@ -74,7 +95,7 @@ kind = "ods"
 | `crates/onto-cli` | The `onto` binary |
 | `crates/onto-testkit` | Fixtures, scripted scenarios, replay, model-driven episodes |
 | `packs/core` | The central pack: data-modelling vocabulary and example concepts |
-| `skills/`, `agents/` | Agent skill and agent definition, tested against the live tool list |
+| `skills/`, `agents/`, `.github/agents/` | Agent skills and the agent definition (Claude Code and Copilot formats), tested against the live tool list |
 | `scenarios/` | Scripted agent/human scenarios run on every PR |
 | `fixtures/` | Fixture workspaces |
 

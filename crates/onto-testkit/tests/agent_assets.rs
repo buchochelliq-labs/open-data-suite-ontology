@@ -21,7 +21,7 @@ async fn skills_and_agents_match_the_server() {
     session.close().await.unwrap();
 
     let skill = std::fs::read_to_string(repo_root().join("skills/ontology-grounding/SKILL.md")).unwrap();
-    let agent = std::fs::read_to_string(repo_root().join("agents/ontology-modelling.agent.md")).unwrap();
+    let agent = std::fs::read_to_string(repo_root().join(".github/agents/ontology-modelling.agent.md")).unwrap();
     assert!(skill.starts_with("---\nname: ontology-grounding\n"), "skill front matter");
 
     for (name, text) in [("SKILL.md", &skill), ("agent", &agent), ("server instructions", &instructions)] {
@@ -69,4 +69,18 @@ async fn only_propose_is_not_read_only() {
         assert!(tool.output_schema.is_some(), "{} should declare structured output", tool.name);
     }
     session.close().await.unwrap();
+}
+
+/// The Claude Code plugin's agent (`agents/`, hyphenated name,
+/// no Copilot tool list) carries the same instructions as the Copilot agent.
+#[test]
+fn the_plugin_agent_matches_the_copilot_agent() {
+    let body = |path: &str| {
+        let text = std::fs::read_to_string(repo_root().join(path)).unwrap();
+        text.splitn(3, "---").nth(2).unwrap().trim().to_string()
+    };
+    assert_eq!(body("agents/ontology-modelling.md"), body(".github/agents/ontology-modelling.agent.md"));
+    let manifest: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(repo_root().join(".claude-plugin/plugin.json")).unwrap()).unwrap();
+    // The server must run against the user's project, not the plugin's folder.
+    assert_eq!(manifest["mcpServers"]["onto"]["args"], serde_json::json!(["mcp", "--root", "${CLAUDE_PROJECT_DIR}"]));
 }

@@ -1277,6 +1277,7 @@ dependencies = [
  "onto-workspace",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
 ]
 

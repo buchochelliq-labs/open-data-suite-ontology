@@ -1,0 +1,14 @@
+{
+  "name": "open-data-suite-ontology",
+  "description": "The onto plugin: ground data-model design in your team's ontology, alongside OpenDataSuite.",
+  "owner": {
+    "name": "buchochelliq-labs"
+  },
+  "plugins": [
+    {
+      "name": "onto",
+      "source": "./",
+      "description": "Ground data-model design in your team's ontology, alongside OpenDataSuite."
+    }
+  ]
+}
