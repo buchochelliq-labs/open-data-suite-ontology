@@ -55,8 +55,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p ~/llama && cd ~/llama
-          gh release download --repo ggml-org/llama.cpp --pattern '*bin-ubuntu-x64.zip'
-          unzip -q ./*.zip
+          gh release download --repo ggml-org/llama.cpp --pattern '*-bin-ubuntu-x64.tar.gz'
+          tar -xzf ./*.tar.gz
           echo "LLAMA_SERVER=$(find "$PWD" -name llama-server -type f | head -1)" >> "$GITHUB_ENV"
 
       - name: Start model server
