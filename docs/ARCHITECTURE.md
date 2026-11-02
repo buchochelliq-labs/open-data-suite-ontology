@@ -42,6 +42,15 @@ every source. On a single-valued predicate, distinct values form a conflict:
 - `proposed` claims appear under `pending` and never as values.
 - `as_of` filters by claim validity (defaults to now in the MCP server).
 
+Known issues (`KnownIssue` entities in the core schema) have a lifecycle:
+`status` (open, fixed, wont_fix), `ticket`, `since`, `fixed_in`, `workaround`,
+and `affects` relations to assets or columns whose `valid` range is when the
+issue affected them. The digest and `ontology_context` list the issues on the
+entities they show that are not fixed and affect them now, under "Known
+issues", never as relationships to follow; fixed ones only when asked
+(`--fixed-issues`, `known_issues: all`), and `ontology_entity` with `as_of`
+lists the issues that applied then.
+
 Cardinality comes from `onto:cardinality` claims, then built-ins. Otherwise
 literal-valued predicates are single-valued and relations are multi-valued.
 

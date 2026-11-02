@@ -6,6 +6,7 @@ pub mod compact;
 pub mod config;
 pub mod digest;
 pub mod git;
+pub mod issues;
 pub mod local;
 pub mod lock;
 pub mod pack;

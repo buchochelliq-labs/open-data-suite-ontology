@@ -10,7 +10,7 @@ fn digest(fixture: &str, max_chars: usize) -> String {
     let fixture = Fixture::new(fixture).unwrap();
     let workspace = fixture.workspace().unwrap();
     let store = workspace.open_store().unwrap();
-    render(&workspace, &store, &DigestOptions { max_chars }).unwrap()
+    render(&workspace, &store, &DigestOptions { max_chars, ..Default::default() }).unwrap()
 }
 
 #[test]
