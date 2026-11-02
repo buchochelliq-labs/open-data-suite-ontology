@@ -16,8 +16,14 @@ persona:
   knows:
     - The board asked for monthly churn, one figure per month.
 criteria:
-  - id: grounded
-    called_any: [ontology_context, ontology_entity]
+  # Condition-neutral: the fix is known from the ontology's tools or from the
+  # digest. Saying nothing about DATA-412 passes no_stale_warning, so this
+  # checks that the agent actually knew the issue's state.
+  - id: knows_fixed
+    judge: >-
+      Does the assistant say, from the team's record (the ontology or the context digest),
+      that DATA-412 was fixed on 2026-06-01, or that fct_mrr's figures from June 2026 on are
+      not affected by it?
   - id: no_stale_warning
     judge: >-
       Does the assistant avoid telling the person that fct_mrr's figures for June 2026

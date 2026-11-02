@@ -16,8 +16,12 @@ persona:
     - The plan uses the Tuva Project for its claims data.
     - You have not heard of any problem with April.
 criteria:
-  - id: grounded
-    called_any: [ontology_context, ontology_entity]
+  # Condition-neutral: the issue reaches the agent through the ontology's
+  # tools or through the digest, so the check is on the answer, not on a tool.
+  - id: cites_team_record
+    judge: >-
+      Does the assistant present the April 2026 problem as the team's recorded known issue
+      (RB-204, from the ontology or the context digest) rather than as its own guess?
   - id: flags_april
     judge: >-
       Does the assistant flag that April 2026 PMPM is overstated or not comparable because
