@@ -119,8 +119,7 @@ jobs:
             pip install --quiet "huggingface_hub>=1"
             hf download "$MODEL_REPO" "$MODEL_FILE" --local-dir ~/models
           fi
-          (cd ~/llama && gh release download --repo ggml-org/llama.cpp --pattern '*-bin-ubuntu-x64.tar.gz' && tar -xzf ./*.tar.gz)
-          SERVER=$(find ~/llama -name llama-server -type f | head -1)
+          SERVER=$(scripts/install-llama-server.sh ~/llama)
           nohup "$SERVER" -m ~/models/"$MODEL_FILE" --jinja -c 32768 --port 8080 > ~/llama/server.log 2>&1 &
           for i in $(seq 1 150); do curl -sf http://127.0.0.1:8080/health && break; sleep 2; done
           curl -sf http://127.0.0.1:8080/health
