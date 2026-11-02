@@ -1,25 +1,63 @@
-name: Release
+name: release
 
-# Prebuilt `onto` binaries for Linux, macOS and Windows.
+# Prebuilt `onto` binaries for Linux, macOS and Windows, released with the
+# buchochelliq-labs standard (https://github.com/buchochelliq-labs/release-kit).
 #
-# Pushing a tag `v*` (e.g. v0.1.0) creates a GitHub release with generated
-# notes and attaches an archive and its SHA-256 per platform. Running the
-# workflow manually builds the same archives as workflow artifacts without
-# releasing anything, to check a build before tagging.
+# On main, after the release PR merges: `python3 ../release-kit/scripts/release.py tag`.
+# It pushes the annotated tags v<version> (the GitHub release's tag, a record)
+# and release-<version>, which starts this run: the gate checks the tag once,
+# CI reruns on the tagged commit, the binaries are built from it, and the
+# archives and their SHA-256 are attached to the release, then downloaded
+# again and checked. A failed run is finished by running `release.py tag`
+# again. Dispatching an existing release tag reruns it.
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["release-*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: An existing release tag (release-X.Y.Z) to run again
+        required: true
 
 permissions:
   contents: read
+
+concurrency:
+  # One release at a time; never cancel one that may be half published.
+  group: release
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.gate.outputs.sha }}
+      release: ${{ steps.gate.outputs.release }}
+      selection: ${{ steps.gate.outputs.selection }}
+      github: ${{ steps.gate.outputs.github }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+      - id: gate
+        uses: buchochelliq-labs/release-kit/gate@v1
+        with:
+          tag: ${{ inputs.tag || github.ref_name }}
+
+  # CI on the tagged commit (it reads the repository: the workflow's contents: read).
+  ci:
+    needs: gate
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.gate.outputs.sha }}
+
   build:
+    needs: [gate, ci]
     strategy:
       fail-fast: false
       matrix:
@@ -35,6 +73,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: ${{ needs.gate.outputs.sha }}
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -42,14 +81,18 @@ jobs:
       - run: cargo build --release --locked -p onto-cli --target ${{ matrix.target }}
       - name: Package
         shell: bash
+        env:
+          VERSION: ${{ needs.gate.outputs.release }}
+          TARGET: ${{ matrix.target }}
+          ARCHIVE: ${{ matrix.archive }}
         run: |
-          name="onto-${GITHUB_REF_NAME//\//-}-${{ matrix.target }}"
+          name="onto-v$VERSION-$TARGET"
           mkdir -p "dist/$name"
-          bin="target/${{ matrix.target }}/release/onto"
-          [ "${{ matrix.archive }}" = zip ] && bin="$bin.exe"
+          bin="target/$TARGET/release/onto"
+          [ "$ARCHIVE" = zip ] && bin="$bin.exe"
           cp "$bin" README.md "dist/$name/"
           cd dist
-          if [ "${{ matrix.archive }}" = zip ]; then
+          if [ "$ARCHIVE" = zip ]; then
             7z a -bd "$name.zip" "$name" > /dev/null
             sha256sum "$name.zip" > "$name.zip.sha256"
           else
@@ -63,23 +106,24 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+  # The only job that can write: it creates the release on v<version> and
+  # attaches the archives the build jobs produced.
+  publish-github:
+    needs: [gate, build]
+    if: needs.gate.outputs.github == 'true'
     runs-on: ubuntu-latest
-    # The only job that can write: it creates the release and attaches the
-    # archives the build jobs produced.
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           path: dist
           merge-multiple: true
-      - name: Create the release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1 || gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
-          gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+      - uses: buchochelliq-labs/release-kit/publish-github@v1
+        with:
+          selection: ${{ needs.gate.outputs.selection }}
+          files: dist/*

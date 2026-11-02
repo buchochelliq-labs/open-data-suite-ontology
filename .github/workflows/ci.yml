@@ -4,6 +4,13 @@ on:
   push:
     branches: [main]
   pull_request:
+  # The release workflow reruns CI on the tagged commit (release-kit standard).
+  workflow_call:
+    inputs:
+      ref:
+        description: Commit to check out
+        type: string
+        default: ""
 
 env:
   CARGO_TERM_COLOR: always
@@ -20,6 +27,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/download-artifact@v4
         with:
           name: tuva-manifest

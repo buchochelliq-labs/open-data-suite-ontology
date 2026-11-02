@@ -53,6 +53,9 @@ agent (it needs `onto` and `ods` on PATH):
 
 Prebuilt `onto` binaries for Linux, macOS and Windows are attached to each
 [release](https://github.com/buchochelliq-labs/open-data-suite-ontology/releases).
+Releases follow the buchochelliq-labs standard,
+[release-kit](https://github.com/buchochelliq-labs/release-kit): `RELEASES.toml`
+says what is published, and `release.py tag` on `main` starts the release.
 
 Agents can read (`ontology_status`, `ontology_search`, `ontology_entity`,
 `ontology_neighbors`, `ontology_context`) and propose (`ontology_propose`).
