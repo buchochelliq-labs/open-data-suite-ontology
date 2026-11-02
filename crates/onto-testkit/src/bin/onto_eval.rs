@@ -18,6 +18,7 @@ use onto_testkit::agent::{ModelConfig, RequestBudget};
 use onto_testkit::claude_code::ClaudeCodeConfig;
 use onto_testkit::eval::{Agent, Cast, Condition, RunResult, Task, errors, render_chat, report, run_task};
 use onto_testkit::fixture::repo_root;
+use onto_testkit::human::PersonHistory;
 
 #[derive(Parser)]
 #[command(about = "Evaluate whether the ontology improves an agent's data-model design")]
@@ -29,13 +30,19 @@ struct Args {
     #[arg(long, default_value_t = 3)]
     runs: usize,
     /// Conditions to compare: ods_only, ontology_only or both, each optionally
-    /// with +digest (the context digest in the system prompt).
-    #[arg(long, value_delimiter = ',', default_values_t = ["ods_only".to_string(), "ontology_only".to_string(), "both".to_string()])]
+    /// with +digest (the context digest in the system prompt). The default is
+    /// the recommended set.
+    #[arg(long, value_delimiter = ',', default_values_t = Condition::RECOMMENDED.map(|c| c.name()))]
     conditions: Vec<String>,
     /// Who plays the person: the tasks' scripted replies, or a model given
     /// each task's persona (tasks without a persona stay scripted).
     #[arg(long, value_enum, default_value_t = HumanMode::Scripted)]
     human: HumanMode,
+    /// What the simulated person sees on each reply: its opening message and
+    /// this many latest messages, the rest summarised as "(n earlier
+    /// messages)"; or `full` for the whole conversation.
+    #[arg(long, default_value_t = PersonHistory::default())]
+    person_window: PersonHistory,
     /// Only tasks whose name contains this.
     #[arg(long)]
     task: Option<String>,
@@ -96,9 +103,9 @@ async fn main() -> Result<()> {
             Agent::Api(c) => c.model.clone(),
             Agent::ClaudeCode(c) => format!("Claude Code ({})", c.model.as_deref().unwrap_or("default model")),
         };
-        eprintln!("person: simulated by {name} from each task's persona");
+        eprintln!("person: simulated by {name} from each task's persona, history {}", args.person_window);
     }
-    let cast = Cast { agent: &agent, judge: judge.as_ref(), person: person.as_ref() };
+    let cast = Cast { agent: &agent, judge: judge.as_ref(), person: person.as_ref(), person_history: args.person_window };
     let conditions: Vec<Condition> = args.conditions.iter().map(|c| c.parse::<Condition>().map_err(anyhow::Error::msg)).collect::<Result<_>>()?;
     let tasks = Task::load_dir(&args.evals.unwrap_or_else(|| repo_root().join("evals")))?;
     let out = args.out.unwrap_or_else(|| repo_root().join("target/eval"));

@@ -10,7 +10,7 @@ use onto_testkit::agent::ModelConfig;
 use onto_testkit::eval::errors;
 use onto_testkit::eval::{Agent, Cast, Condition, Exploration, ODS_GUIDANCE, Outcome, SYSTEM_PROMPT, Task, report, run_task, system_prompt};
 use onto_testkit::fake_model::{error, say, serve, tool_call};
-use onto_testkit::fixture::repo_root;
+use onto_testkit::fixture::{ods_available, repo_root};
 use serde_json::json;
 
 fn config(base_url: String) -> ModelConfig {
@@ -169,6 +169,57 @@ fn the_digest_is_added_only_for_digest_conditions() {
     let prompt = system_prompt("both+digest".parse().unwrap(), Some(digest));
     assert!(prompt.contains("generated from the ontology with `onto context`") && prompt.ends_with(digest));
     assert!(system_prompt("ods_only+digest".parse().unwrap(), Some(digest)).contains(ODS_GUIDANCE));
+}
+
+#[test]
+fn ods_only_with_the_digest_is_a_recommended_condition() {
+    let names: Vec<String> = Condition::RECOMMENDED.iter().map(|c| c.name()).collect();
+    assert_eq!(names, ["ods_only", "ontology_only", "both", "ods_only+digest"]);
+    assert_eq!("ods_only+digest".parse::<Condition>().unwrap(), Condition::ODS_ONLY_DIGEST);
+    // ODS's tools only; the ontology contributes nothing but the digest.
+    let condition = Condition::ODS_ONLY_DIGEST;
+    assert_eq!(condition.prefixes(), ["ods_"]);
+    assert!(condition.needs_ods() && !condition.needs_ontology());
+    let digest = "# Team context\n- **Net sales**";
+    let prompt = system_prompt(condition, Some(digest));
+    assert!(prompt.contains(ODS_GUIDANCE) && prompt.ends_with(digest));
+    assert!(!prompt.contains("# Ground a design in the ontology"), "no grounding skill for tools it cannot see");
+    // The Evaluate workflow runs the same set by default.
+    let workflow = std::fs::read_to_string(repo_root().join(".github/workflows/eval.yml")).unwrap();
+    let default = workflow
+        .lines()
+        .skip_while(|l| !l.trim_start().starts_with("conditions:"))
+        .find_map(|l| l.trim().strip_prefix("default: "))
+        .expect("the workflow's conditions input has a default");
+    assert_eq!(default, names.join(","));
+}
+
+#[tokio::test]
+async fn ods_only_with_the_digest_sees_ods_tools_and_the_digest() {
+    if !ods_available() {
+        eprintln!("skipping: OpenDataSuite `ods` not found (pip install opendatasuite==0.0.2, or set ONTO_ODS_BIN)");
+        return;
+    }
+    let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
+    let task = tasks.iter().find(|t| t.name == "orders-fact-grain").unwrap();
+    assert!(task.applies_to(Condition::ODS_ONLY_DIGEST));
+    let (agent_url, requests) = serve(vec![
+        // The ontology's tools are hidden, so this is refused.
+        tool_call("1", "ontology_entity", json!({ "id": "model.jaffle_ods.orders" })),
+        say("One row per order, keyed by order_id. Which customer definition do you want?"),
+        say("Then use the team's: one row per order."),
+    ])
+    .await;
+    let result = run_task(task, Condition::ODS_ONLY_DIGEST, 1, Cast::new(&Agent::Api(config(agent_url)))).await.unwrap();
+    assert!(result.skipped.is_none() && result.error.is_none(), "{:?} {:?}", result.skipped, result.error);
+    assert_eq!(result.failed_tool_calls, 1, "the ontology's tool was refused");
+
+    let requests = requests.lock().unwrap();
+    let tools: Vec<&str> = requests[0]["tools"].as_array().unwrap().iter().map(|t| t["function"]["name"].as_str().unwrap()).collect();
+    assert!(!tools.is_empty() && tools.iter().all(|t| t.starts_with("ods_")), "{tools:?}");
+    let system = requests[0]["messages"][0]["content"].as_str().unwrap();
+    assert!(system.contains(ODS_GUIDANCE));
+    assert!(system.contains("generated from the ontology with `onto context`"), "the digest is in context");
 }
 
 #[test]
