@@ -339,6 +339,72 @@ pub fn overview(workspace: &Workspace, store: &Store, health: Health, req: Overv
     Ok(OverviewResponse { types, predicates, concepts, standards, health, omitted, notice: super::NOTICE.into() })
 }
 
+/// A standard that narrows another for this team.
+const REFINES: &str = "refines";
+
+/// The core pack's concept for "every model".
+const ANY_MODEL: &str = "concept:any-model";
+
+/// At most this many team-wide standards are listed with each answer.
+pub const MAX_TEAM_STANDARDS: usize = 10;
+
+/// Modelling standards and decisions that apply everywhere: no `applies_to`
+/// relationship ties them to particular models or concepts, so looking up an
+/// entity never leads to them. `ontology_context` and `ontology_entity` list
+/// them with every answer, as the digest does, as `(id, line)` by id.
+/// Resolved at `as_of` (now when `None`), like the answer they come with.
+pub fn team_wide_standards(workspace: &Workspace, store: &Store, as_of: Option<String>) -> Result<Vec<(String, String)>, String> {
+    let schema = workspace.schema(store).map_err(err)?;
+    let resolver = workspace.resolver(Some(as_of.unwrap_or_else(now_rfc3339)));
+    let mut ids: Vec<String> = store
+        .records_with_predicate(vocab::TYPE)
+        .map_err(err)?
+        .into_iter()
+        .filter(|r| matches!(r.claim.object.entity(), Some("ModellingStandard" | "Decision")))
+        .map(|r| r.claim.subject)
+        .collect();
+    ids.sort();
+    ids.dedup();
+    let mut candidates = Vec::new();
+    for id in ids {
+        let view = resolver.resolve_entity(&id, &store.records_about(&id).map_err(err)?, &schema);
+        let types = view.entities(vocab::TYPE);
+        if !types.iter().any(|t| *t == "ModellingStandard" || *t == "Decision") {
+            continue;
+        }
+        // Scoped standards reach agents through their relationships. One that
+        // applies to `concept:any-model` (the core pack's catch-all) is team-wide.
+        let scoped = view.property("applies_to").is_some_and(|p| p.conflict.is_some() || p.values.iter().any(|v| v.object.entity() != Some(ANY_MODEL)));
+        if scoped {
+            continue;
+        }
+        candidates.push((id, view));
+    }
+    // A standard another team-wide standard refines is replaced by the
+    // refinement (the team's own rule wins over the general one), so only the
+    // refinement is listed; the refined one is a relationship away.
+    let refined: BTreeSet<String> =
+        candidates.iter().flat_map(|(_, view)| view.entities(REFINES).into_iter().map(str::to_string).collect::<Vec<_>>()).collect();
+    let mut out = Vec::new();
+    for (id, view) in candidates {
+        if refined.contains(&id) {
+            continue;
+        }
+        let mut line = id.clone();
+        if let Some(label) = view.text(vocab::LABEL).filter(|l| *l != id) {
+            line.push_str(&format!(" \"{}\"", shown(label, SHORT_TEXT_CHARS)));
+        }
+        if let Some(definition) = definition(&view, STANDARD_DEFINITION_CHARS, true) {
+            line.push_str(&format!(": {definition}"));
+        }
+        out.push((id, line));
+        if out.len() == MAX_TEAM_STANDARDS {
+            break;
+        }
+    }
+    Ok(out)
+}
+
 /// The status of each source as one line.
 pub fn source_line(source: &onto_store::SourceState) -> String {
     format!(

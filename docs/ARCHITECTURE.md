@@ -51,6 +51,14 @@ issues", never as relationships to follow; fixed ones only when asked
 (`--fixed-issues`, `known_issues: all`), and `ontology_entity` with `as_of`
 lists the issues that applied then.
 
+Team-wide standards are `ModellingStandard` and `Decision` entities with no
+`applies_to`, or with `applies_to` only `concept:any-model`. Looking up a model
+never leads to them, so `ontology_context` and `ontology_entity` list them under
+`team_standards` with every answer (at most ten), as the digest lists every
+standard. A standard that another team-wide standard `refines` is left out:
+the team's narrower rule replaces the general one, which stays a relationship
+away.
+
 Cardinality comes from `onto:cardinality` claims, then built-ins. Otherwise
 literal-valued predicates are single-valued and relations are multi-valued.
 

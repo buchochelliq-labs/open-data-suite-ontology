@@ -156,6 +156,10 @@ pub struct EntityResponse {
     /// those that affected it at `as_of`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub known_issues: Vec<String>,
+    /// The team's standards and decisions that apply everywhere (no
+    /// `applies_to`): they bind every model, this one included.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub team_standards: Vec<String>,
     /// What was left out and how to get it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub omitted: Option<String>,
@@ -224,6 +228,11 @@ pub struct ContextResponse {
     /// unless `known_issues: all` was asked for.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub known_issues: Vec<String>,
+    /// The team's standards and decisions that apply everywhere (no
+    /// `applies_to`), unless already among the entities above. They bind every
+    /// model, so they come with every answer, as in the digest.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub team_standards: Vec<String>,
     /// Ids and terms that matched nothing; a miss on a word is not proof of absence.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub not_found: Vec<String>,
@@ -386,7 +395,7 @@ impl OntologyServer {
                 None => Scope::Current(now_rfc3339()),
             };
             let known_issues = issues::known_issues(ws, store, Some(std::slice::from_ref(&req.id)), &scope).map_err(err)?.into_iter().map(|i| i.line).collect();
-            let view = Self::resolve(ws, store, &req.id, req.as_of)?;
+            let view = Self::resolve(ws, store, &req.id, req.as_of.clone())?;
             let unresolved_conflicts = view
                 .properties
                 .iter()
@@ -402,6 +411,11 @@ impl OntologyServer {
                 facts: Vec::new(),
                 entity: None,
                 known_issues,
+                team_standards: if found {
+                    overview::team_wide_standards(ws, store, req.as_of.clone())?.into_iter().filter(|(id, _)| *id != req.id).map(|(_, line)| line).collect()
+                } else {
+                    Vec::new()
+                },
                 omitted: None,
                 unresolved_conflicts,
                 suggestions,
@@ -421,7 +435,7 @@ impl OntologyServer {
     }
 
     #[tool(
-        description = "Several entities and the relationships between them in one call: start from dbt node ids or concept ids and/or words, follow relationships 1–2 hops, within a character budget. Lists open known issues on those entities (known_issues: all adds fixed ones). Use it first for design questions.",
+        description = "Several entities and the relationships between them in one call: start from dbt node ids or concept ids and/or words, follow relationships 1–2 hops, within a character budget. Lists open known issues on those entities (known_issues: all adds fixed ones) and the team-wide standards that bind every model. Use it first for design questions.",
         annotations(read_only_hint = true, open_world_hint = false)
     )]
     pub async fn ontology_context(&self, Parameters(req): Parameters<ContextRequest>) -> Result<Json<ContextResponse>, String> {
@@ -532,7 +546,13 @@ impl OntologyServer {
             // entities, then the relationships, then the entities they lead to.
             // Everything counts; known issues always fit, as they are warnings.
             let known_issues: Vec<String> = issues::known_issues(ws, store, Some(&order), &issue_scope).map_err(err)?.into_iter().map(|i| i.line).collect();
-            let mut used: usize = known_issues.iter().map(|line| line.len() + 3).sum();
+            // Team-wide standards bind every model; like known issues they
+            // always fit (there are at most MAX_TEAM_STANDARDS). Their room is
+            // reserved here; one whose entity ends up in the answer is dropped
+            // from this list afterwards, never before the budget is applied.
+            let all_standards = overview::team_wide_standards(ws, store, None)?;
+            let mut used: usize =
+                known_issues.iter().chain(all_standards.iter().map(|(_, line)| line)).map(|line| line.len() + 3).sum();
             let mut entities = Vec::new();
             let mut skipped_entities = 0;
             let mut entity = |id: &String, used: &mut usize, dbt_only: &mut usize| -> Result<(), String> {
@@ -575,7 +595,9 @@ impl OntologyServer {
             if truncated {
                 more.push(format!("an entity had more than {MAX_CONTEXT_EDGES} relationships; ask ontology_neighbors for the rest"));
             }
-            Ok(Json(ContextResponse { entities, relationships, known_issues, not_found, omitted: omitted_note(dbt_only, &more.join("; ")), notice: NOTICE.into() }))
+            let team_standards: Vec<String> =
+                all_standards.into_iter().filter(|(id, _)| !entities.iter().any(|e| e.id == *id)).map(|(_, line)| line).collect();
+            Ok(Json(ContextResponse { entities, relationships, known_issues, team_standards, not_found, omitted: omitted_note(dbt_only, &more.join("; ")), notice: NOTICE.into() }))
         })
     }
 
