@@ -287,6 +287,37 @@ criteria:
 }
 
 #[tokio::test]
+async fn a_judge_reply_that_is_not_json_is_asked_again() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("retry.yaml"),
+        r#"
+name: retry
+fixture: shop
+conditions: [ontology_only]
+prompt: What is a customer?
+criteria:
+  - { id: grounded, judge: "Is the answer grounded?" }
+"#,
+    )
+    .unwrap();
+    let tasks = Task::load_dir(dir.path()).unwrap();
+    let (agent_url, _) = serve(vec![say("An account holder.")]).await;
+    // A reason with an unescaped quote, as a pilot run's judge once wrote.
+    let (judge_url, judge_requests) = serve(vec![
+        say(r#"{"grounded": {"pass": true, "reason": "Cites the "team" definition."}}"#),
+        say(r#"{"grounded": {"pass": true, "reason": "Cites the team's definition."}}"#),
+    ])
+    .await;
+    let (agent, judge) = (Agent::Api(config(agent_url)), Agent::Api(config(judge_url)));
+    let cast = Cast { judge: Some(&judge), ..Cast::new(&agent) };
+    let result = run_task(&tasks[0], Condition::ONTOLOGY_ONLY, 1, cast).await.unwrap();
+    let grounded = result.criteria.iter().find(|c| c.id == "grounded").unwrap();
+    assert_eq!(grounded.outcome, Outcome::Pass, "{grounded:?}");
+    assert_eq!(judge_requests.lock().unwrap().len(), 2, "asked once more after the malformed reply");
+}
+
+#[tokio::test]
 async fn a_judge_that_contradicts_itself_is_an_error_not_a_score() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(

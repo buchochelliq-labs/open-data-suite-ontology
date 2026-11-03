@@ -436,11 +436,32 @@ impl Verdict {
 /// Verdicts by criterion id.
 type Verdicts = BTreeMap<String, Verdict>;
 
+/// How many times the judge is asked when its reply is not valid JSON. A
+/// malformed reply (an unescaped quote in a reason, say) is a formatting slip,
+/// not a verdict, so asking again is cheaper than losing the conversation's
+/// scores.
+const JUDGE_ATTEMPTS: usize = 2;
+
 /// Every judged question about one conversation in a single request.
 async fn judge(judge: &Judge, questions: &[(&str, &str)], transcript: &Transcript) -> Result<(Verdicts, TokenUsage)> {
     let listed: Vec<String> = questions.iter().map(|(id, q)| format!("- {id}: {q}")).collect();
     let prompt = format!("Questions:\n{}\n\nConversation:\n{}", listed.join("\n"), render(transcript));
-    let (text, usage) = ask(judge, JUDGE_SYSTEM, &prompt).await?;
+    let mut usage = TokenUsage::default();
+    let mut attempt = 0;
+    loop {
+        attempt += 1;
+        let (text, used) = ask(judge, JUDGE_SYSTEM, &prompt).await?;
+        usage += used;
+        match parse_verdicts(&text, questions) {
+            Ok(verdicts) => return Ok((verdicts, usage)),
+            Err(e) if attempt >= JUDGE_ATTEMPTS => return Err(e.context(format!("after {attempt} attempts"))),
+            Err(_) => continue,
+        }
+    }
+}
+
+/// The verdicts in a judge's reply: a JSON object by question id.
+fn parse_verdicts(text: &str, questions: &[(&str, &str)]) -> Result<Verdicts> {
     let start = text.find('{').context("judge reply has no JSON")?;
     let end = text.rfind('}').context("judge reply has no JSON")?;
     let reply: Value = serde_json::from_str(&text[start..=end]).context("judge reply is not JSON")?;
@@ -455,7 +476,7 @@ async fn judge(judge: &Judge, questions: &[(&str, &str)], transcript: &Transcrip
     if verdicts.is_empty() && questions.len() == 1 && reply.get("pass").is_some() {
         verdicts.insert(questions[0].0.to_string(), verdict(&reply));
     }
-    Ok((verdicts, usage))
+    Ok(verdicts)
 }
 
 /// What the judge said about a run: verdicts, or why there are none.
