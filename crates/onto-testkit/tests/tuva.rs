@@ -107,3 +107,19 @@ async fn the_open_member_month_issue_is_listed_on_its_model_and_in_the_digest() 
     let digest = onto_workspace::digest::render(&workspace, &store, &onto_workspace::digest::DigestOptions::default()).unwrap();
     assert!(digest.contains("Known issues") && digest.contains("RB-204"), "{digest}");
 }
+
+#[tokio::test]
+async fn counting_people_reaches_an_agent_that_looks_up_core_cost() {
+    // #46: in the Tuva baseline, agents with tools looked up core__cost and
+    // core__member_month and never met standard:count-people, which no model
+    // links to. It now comes with every context answer.
+    if !ready() {
+        return;
+    }
+    let fixture = Fixture::new("tuva").unwrap();
+    let mut session = Session::start(&fixture).await.unwrap();
+    let (ok, context) = session.call("ontology_context", json!({ "ids": ["model.the_tuva_project.core__cost"] })).await.unwrap();
+    assert!(ok, "{context}");
+    assert!(context["team_standards"].to_string().contains("standard:count-people"), "{context}");
+    session.close().await.unwrap();
+}
