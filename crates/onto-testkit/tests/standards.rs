@@ -80,3 +80,46 @@ async fn the_core_naming_standard_is_team_wide_until_refined() {
     assert!(lines(&context["team_standards"]).iter().any(|l| l.starts_with("standard:model-naming")), "{context}");
     session.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_standard_is_always_delivered_once_even_on_a_small_budget() {
+    // Asked for by id but left out of `entities` by the budget, a team-wide
+    // standard must still come back under `team_standards`.
+    let fixture = Fixture::new("shop").unwrap();
+    add_pack(&fixture, "standards.yaml", STANDARDS);
+    let mut session = Session::start(&fixture).await.unwrap();
+    for max_chars in [500, 6000] {
+        let (ok, context) =
+            session.call("ontology_context", json!({ "ids": ["concept:return", "standard:count-people"], "depth": 2, "max_chars": max_chars })).await.unwrap();
+        assert!(ok, "{context}");
+        let in_entities = context["entities"].as_array().unwrap().iter().any(|e| e["id"] == "standard:count-people");
+        let in_standards = lines(&context["team_standards"]).iter().any(|l| l.starts_with("standard:count-people"));
+        assert!(in_entities != in_standards, "listed exactly once at max_chars {max_chars}: {context}");
+    }
+    session.close().await.unwrap();
+}
+
+#[tokio::test]
+async fn team_standards_are_resolved_as_of_the_entity_answer() {
+    // Scoped to one model until 2026-01-01, team-wide since.
+    let fixture = Fixture::new("shop").unwrap();
+    add_pack(
+        &fixture,
+        "history.yaml",
+        r#"entities:
+  - id: standard:returns-net
+    type: ModellingStandard
+    label: Report returns net of restocking
+    definition: Returns are reported net of restocking fees.
+    relations:
+      - { predicate: applies_to, target: model.shop.fct_orders, valid: { until: "2026-01-01" } }
+"#,
+    );
+    let mut session = Session::start(&fixture).await.unwrap();
+    let listed = |entity: &Value| lines(&entity["team_standards"]).iter().any(|l| l.starts_with("standard:returns-net"));
+    let (_, now) = session.call("ontology_entity", json!({ "id": "concept:return" })).await.unwrap();
+    assert!(listed(&now), "team-wide now: {now}");
+    let (_, then) = session.call("ontology_entity", json!({ "id": "concept:return", "as_of": "2025-06-01T00:00:00Z" })).await.unwrap();
+    assert!(!listed(&then), "scoped in 2025: {then}");
+    session.close().await.unwrap();
+}

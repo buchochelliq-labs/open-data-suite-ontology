@@ -395,7 +395,7 @@ impl OntologyServer {
                 None => Scope::Current(now_rfc3339()),
             };
             let known_issues = issues::known_issues(ws, store, Some(std::slice::from_ref(&req.id)), &scope).map_err(err)?.into_iter().map(|i| i.line).collect();
-            let view = Self::resolve(ws, store, &req.id, req.as_of)?;
+            let view = Self::resolve(ws, store, &req.id, req.as_of.clone())?;
             let unresolved_conflicts = view
                 .properties
                 .iter()
@@ -412,7 +412,7 @@ impl OntologyServer {
                 entity: None,
                 known_issues,
                 team_standards: if found {
-                    overview::team_wide_standards(ws, store)?.into_iter().filter(|(id, _)| *id != req.id).map(|(_, line)| line).collect()
+                    overview::team_wide_standards(ws, store, req.as_of.clone())?.into_iter().filter(|(id, _)| *id != req.id).map(|(_, line)| line).collect()
                 } else {
                     Vec::new()
                 },
@@ -547,13 +547,12 @@ impl OntologyServer {
             // Everything counts; known issues always fit, as they are warnings.
             let known_issues: Vec<String> = issues::known_issues(ws, store, Some(&order), &issue_scope).map_err(err)?.into_iter().map(|i| i.line).collect();
             // Team-wide standards bind every model; like known issues they
-            // always fit (there are at most MAX_TEAM_STANDARDS).
-            let team_standards: Vec<String> = overview::team_wide_standards(ws, store)?
-                .into_iter()
-                .filter(|(id, _)| !order.contains(id))
-                .map(|(_, line)| line)
-                .collect();
-            let mut used: usize = known_issues.iter().chain(&team_standards).map(|line| line.len() + 3).sum();
+            // always fit (there are at most MAX_TEAM_STANDARDS). Their room is
+            // reserved here; one whose entity ends up in the answer is dropped
+            // from this list afterwards, never before the budget is applied.
+            let all_standards = overview::team_wide_standards(ws, store, None)?;
+            let mut used: usize =
+                known_issues.iter().chain(all_standards.iter().map(|(_, line)| line)).map(|line| line.len() + 3).sum();
             let mut entities = Vec::new();
             let mut skipped_entities = 0;
             let mut entity = |id: &String, used: &mut usize, dbt_only: &mut usize| -> Result<(), String> {
@@ -596,6 +595,8 @@ impl OntologyServer {
             if truncated {
                 more.push(format!("an entity had more than {MAX_CONTEXT_EDGES} relationships; ask ontology_neighbors for the rest"));
             }
+            let team_standards: Vec<String> =
+                all_standards.into_iter().filter(|(id, _)| !entities.iter().any(|e| e.id == *id)).map(|(_, line)| line).collect();
             Ok(Json(ContextResponse { entities, relationships, known_issues, team_standards, not_found, omitted: omitted_note(dbt_only, &more.join("; ")), notice: NOTICE.into() }))
         })
     }

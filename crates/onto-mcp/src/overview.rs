@@ -352,9 +352,10 @@ pub const MAX_TEAM_STANDARDS: usize = 10;
 /// relationship ties them to particular models or concepts, so looking up an
 /// entity never leads to them. `ontology_context` and `ontology_entity` list
 /// them with every answer, as the digest does, as `(id, line)` by id.
-pub fn team_wide_standards(workspace: &Workspace, store: &Store) -> Result<Vec<(String, String)>, String> {
+/// Resolved at `as_of` (now when `None`), like the answer they come with.
+pub fn team_wide_standards(workspace: &Workspace, store: &Store, as_of: Option<String>) -> Result<Vec<(String, String)>, String> {
     let schema = workspace.schema(store).map_err(err)?;
-    let resolver = workspace.resolver(Some(now_rfc3339()));
+    let resolver = workspace.resolver(Some(as_of.unwrap_or_else(now_rfc3339)));
     let mut ids: Vec<String> = store
         .records_with_predicate(vocab::TYPE)
         .map_err(err)?
