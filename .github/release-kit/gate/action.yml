@@ -7,6 +7,11 @@ inputs:
   tag:
     description: The release tag (release-X.Y.Z), as pushed or dispatched.
     required: true
+  verify-only:
+    description: >-
+      "true" for a verify-only run: select the release's published packages to
+      verify them again, and build and upload nothing.
+    default: "false"
 outputs:
   sha:
     description: The tagged commit.
@@ -17,6 +22,9 @@ outputs:
   selection:
     description: JSON list of the packages to publish (name, registry, version, manifest, tag), in order.
     value: ${{ steps.gate.outputs.selection }}
+  verify-only:
+    description: '"true" in a verify-only run.'
+    value: ${{ steps.gate.outputs.verify-only }}
   github:
     description: '"true" when a GitHub Releases package is due.'
     value: ${{ steps.gate.outputs.github }}
@@ -36,7 +44,7 @@ runs:
   using: composite
   steps:
     # release.py reads release-kit.yml with PyYAML.
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
         python-version: "3.12"
     - shell: bash
@@ -47,4 +55,8 @@ runs:
       shell: bash
       env:
         RELEASE_TAG: ${{ inputs.tag }}
-      run: python3 "$GITHUB_ACTION_PATH/../scripts/release.py" gate "$RELEASE_TAG"
+        VERIFY_ONLY: ${{ inputs.verify-only }}
+      run: |
+        set -euo pipefail
+        flags=(); [ "$VERIFY_ONLY" = true ] && flags=(--verify-only)
+        python3 "$GITHUB_ACTION_PATH/../scripts/release.py" gate "$RELEASE_TAG" "${flags[@]}"

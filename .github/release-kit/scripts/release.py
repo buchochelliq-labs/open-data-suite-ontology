@@ -73,6 +73,7 @@ import re
 import shutil
 import subprocess
 import tarfile
+import tempfile
 import time
 import tomllib
 import zipfile
@@ -394,11 +395,11 @@ DEFAULT_TARGETS = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu", "aar
                    "x86_64-apple-darwin", "x86_64-pc-windows-msvc"]
 # kind: (registries it can feed, required fields, optional fields)
 KINDS = {
-    "rust-binary": ({"github"}, {"bin"}, {"crate", "targets", "include"}),
-    "python": ({"pypi", "github"}, set(), {"dir"}),
-    "maturin": ({"pypi", "github"}, set(), {"targets", "sdist"}),
-    "vsix": ({"vscode", "github"}, set(), {"dir"}),
-    "command": ({"github", "pypi", "vscode"}, {"run", "outputs"}, {"os"}),
+    "rust-binary": ({"github"}, {"bin"}, {"crate", "targets", "include", "test"}),
+    "python": ({"pypi", "github"}, set(), {"dir", "test"}),
+    "maturin": ({"pypi", "github"}, set(), {"targets", "sdist", "test"}),
+    "vsix": ({"vscode", "github"}, set(), {"dir", "test"}),
+    "command": ({"github", "pypi", "vscode"}, {"run", "outputs"}, {"os", "test"}),
 }
 # Registries that publish from source need no artifacts; the others do.
 FROM_SOURCE = {"crates.io", "npm"}
@@ -414,6 +415,18 @@ def targets_of(artifact):
         else:
             out.append((entry, RUNNERS.get(entry)))
     return out
+
+
+def test_of(artifact, target=""):
+    """The artifact's `test` command for a build job, or None: a string runs
+    after every job of the artifact; {run, targets} only after the listed
+    targets' jobs (a cross-compiled wheel cannot be installed on its runner)."""
+    test = artifact.get("test")
+    if isinstance(test, str):
+        return test
+    if isinstance(test, dict) and (not test.get("targets") or target in test["targets"]):
+        return test.get("run")
+    return None
 
 
 def artifact_errors(package):
@@ -439,6 +452,13 @@ def artifact_errors(package):
             errors.append(f"{where}: {kind} needs {', '.join(sorted(missing))}")
         if unknown := artifact.keys() - required - optional - {"kind"}:
             errors.append(f"{where}: {kind} does not take {', '.join(sorted(unknown))}")
+        test = artifact.get("test")
+        if test is not None and not (isinstance(test, str) or (
+                isinstance(test, dict) and isinstance(test.get("run"), str)
+                and set(test) <= {"run", "targets"})):
+            errors.append(f"{where}: test is a command, or {{run: ..., targets: [...]}}")
+        elif isinstance(test, dict) and test.get("targets") and kind not in ("rust-binary", "maturin"):
+            errors.append(f"{where}: {kind} is not built per target; give test as a command")
         if kind in ("rust-binary", "maturin"):
             for target, runner in targets_of(artifact):
                 if not runner:
@@ -469,24 +489,25 @@ def plan(selection, read=None, output=None):
                 for target, runner in targets_of(artifact):
                     jobs.append({**base, "id": job_id(package.slug, kind, target), "kind": kind, "os": runner,
                                  "target": target, "bin": artifact["bin"], "crate": crate,
-                                 "include": list(artifact.get("include") or [])})
+                                 "include": list(artifact.get("include") or []),
+                                 "test": test_of(artifact, target)})
             elif kind == "maturin":
                 # maturin builds from the crate beside pyproject.toml.
                 cargo = str(PurePosixPath(package.manifest).parent / "Cargo.toml")
                 for target, runner in targets_of(artifact):
                     jobs.append({**base, "id": job_id(package.slug, kind, target), "kind": kind, "os": runner,
-                                 "target": target, "cargo": cargo})
+                                 "target": target, "cargo": cargo, "test": test_of(artifact, target)})
                 if artifact.get("sdist", True):
                     jobs.append({**base, "id": job_id(package.slug, "sdist"), "kind": "maturin-sdist",
-                                 "os": "ubuntu-latest", "target": "", "cargo": cargo})
+                                 "os": "ubuntu-latest", "target": "", "cargo": cargo, "test": None})
             elif kind in ("python", "vsix"):
                 directory = artifact.get("dir") or str(PurePosixPath(package.manifest).parent)
                 jobs.append({**base, "id": job_id(package.slug, kind, index), "kind": kind,
-                             "os": "ubuntu-latest", "target": "", "dir": directory})
+                             "os": "ubuntu-latest", "target": "", "dir": directory, "test": test_of(artifact)})
             elif kind == "command":
                 jobs.append({**base, "id": job_id(package.slug, kind, index), "kind": kind,
                              "os": artifact.get("os", "ubuntu-latest"), "target": "",
-                             "run": artifact["run"], "outputs": artifact["outputs"]})
+                             "run": artifact["run"], "outputs": artifact["outputs"], "test": test_of(artifact)})
     ids = [j["id"] for j in jobs]
     if len(ids) != len(set(ids)):
         raise ValueError("two artifacts plan the same build job; give them different targets")
@@ -573,6 +594,13 @@ def build(job, out=Path("dist")):
         made = sorted(p for p in out.iterdir() if not p.name.endswith(".sha256"))
     if not made:
         raise RuntimeError(f"{job['id']} produced no files in {out}")
+    if test := job.get("test"):
+        # The artifact's own test, on what was just built, before anything
+        # can publish it: a failure fails the build, and the publish jobs need it.
+        run(test, shell=True, env={"DIST": str(out), "FILES": " ".join(str(p) for p in made),
+                                   "VERSION": job["version"], "PACKAGE": job["package"],
+                                   "TARGET": job.get("target", "")})
+        print(f"tested {job['id']}", flush=True)
     if job["registry"] == "github":
         for path in made:
             sha256_file(path)
@@ -645,6 +673,48 @@ def dead(run, tagged):
                 and run["conclusion"] != "success" and not run["publish_started"])
 
 
+def tag_subject(name, remote="origin"):
+    """The first line of an annotated tag's message, fetched from `remote`
+    (it may have moved); "" for a lightweight tag."""
+    ref = f"refs/tags/{name}"
+    git("fetch", "--quiet", "--no-tags", remote, f"+{ref}:{ref}")
+    if git("cat-file", "-t", ref) != "tag":
+        return ""
+    return git("for-each-ref", ref, "--format=%(contents:subject)")
+
+
+def not_its_own(release, existing, sha, remote, packages=None):
+    """Package tags already on the remote at another commit that were not
+    made for that package: `tag` writes `<name> <version> (<registry>)` as a
+    record's first line. Another package's tag with the same name (a crate and
+    a PyPI package called alike), or one made by other tooling, is not this
+    package's record."""
+    found = []
+    for package in packages if packages is not None else release.packages:
+        tagged = existing.get(package.tag)
+        if tagged and tagged != sha and tag_subject(package.tag, remote) != str(package):
+            found.append(package)
+    return found
+
+
+def foreign_error(packages, existing):
+    lines = [f"  {p.tag} at {existing[p.tag][:12]}: not {p}'s record" for p in packages]
+    return ("these tags already exist for something else:\n" + "\n".join(lines) + "\n"
+            "Give the package a tag format of its own in release-kit.yml (for example "
+            "`tag: \"python-v{version}\"` for a PyPI package named like a crate), or bump its version.")
+
+
+def release_at(commit, package=None):
+    """The release configured at `commit`; a commit without release-kit.yml
+    (a tag from before the repository adopted release-kit) is refused."""
+    try:
+        return load(files_at(commit))
+    except subprocess.CalledProcessError:
+        what = f"{package.tag} is on {commit[:12]}, which" if package else f"{commit[:12]}"
+        raise RuntimeError(f"{what} has no {CONFIG}: the tag predates release-kit. Bump the package's "
+                           "version, or delete the stale tag if nothing was published from it.") from None
+
+
 def changed_files(package, old, new):
     names = git("diff", "--name-only", old, new).splitlines()
     return [n for n in names if any(fnmatch.fnmatch(n, pattern) for pattern in package.shipped)]
@@ -685,7 +755,7 @@ def trailers(tag_name):
 # The gate (CI)
 
 
-def gate(tag_name, remote="origin", status=published_on, output=None):
+def gate(tag_name, remote="origin", status=published_on, output=None, verify_only=False):
     """Everything a release run must hold before building, from the checked-out
     tag. Returns the outputs written to GITHUB_OUTPUT."""
     ref = f"refs/tags/{tag_name}"
@@ -710,6 +780,11 @@ def gate(tag_name, remote="origin", status=published_on, output=None):
                            "in its message (release.py tag writes them)")
     existing = remote_tags(remote)
     have_commits(existing, remote)
+    unpublished = [p for p in release.packages if not status(p)]
+    if foreign := not_its_own(release, existing, sha, remote, unpublished):
+        raise RuntimeError(foreign_error(foreign, existing))
+    if verify_only:
+        return verify_selection(tag_name, release, sha, existing, status, output)
     if split := split_from(release, existing, sha, lambda package, tagged: True):
         raise RuntimeError(split_error(sha, split))
     due = []
@@ -728,22 +803,43 @@ def gate(tag_name, remote="origin", status=published_on, output=None):
                            "release.py tag pushes them.")
     if plain := lightweight(remote, [p.tag for p in due]):
         raise RuntimeError(f"record tags must be annotated: {', '.join(sorted(plain))}")
+    outputs = gate_outputs(sha, release, due, False, output)
+    print(f"{tag_name} -> {sha} (release {release.name}): publishing "
+          + ", ".join(str(p) for p in due), flush=True)
+    return outputs
+
+
+def gate_outputs(sha, release, chosen, verify_only, output=None):
     outputs = {
         "sha": sha,
         "release": release.name,
         "selection": json.dumps([{"name": p.name, "registry": p.registry, "version": p.version,
-                                  "manifest": p.manifest, "tag": p.tag, "slug": p.slug} for p in due]),
+                                  "manifest": p.manifest, "tag": p.tag, "slug": p.slug} for p in chosen]),
+        "verify-only": str(verify_only).lower(),
     }
     for registry in REGISTRIES:
-        outputs[registry.replace(".", "-")] = str(any(p.registry == registry for p in due)).lower()
+        outputs[registry.replace(".", "-")] = str(any(p.registry == registry for p in chosen)).lower()
     target = output or os.environ.get("GITHUB_OUTPUT")
     if target:
         with open(target, "a", encoding="utf-8") as handle:
             for key, value in outputs.items():
                 handle.write(f"{key}={value}\n")
-    print(f"{tag_name} -> {sha} (release {release.name}): publishing "
-          + ", ".join(str(p) for p in due), flush=True)
     return outputs
+
+
+def verify_selection(tag_name, release, sha, existing, status, output):
+    """A verify-only run: the packages this release tagged on `sha`, every
+    one already published. Builds and uploads nothing; the publish jobs only
+    verify. It cannot finish a partial upload: run `release.py tag` for that."""
+    mine = [p for p in release.packages if existing.get(p.tag) == sha]
+    if not mine:
+        raise RuntimeError(f"{tag_name}: no package of release {release.name} is tagged on {sha[:12]}")
+    if missing := [str(p) for p in mine if not status(p)]:
+        raise RuntimeError(f"a verify-only run checks a finished upload, but these are not published: "
+                           f"{', '.join(missing)}. Run `release.py tag` again to publish them.")
+    print(f"{tag_name} -> {sha} (release {release.name}): verifying " + ", ".join(str(p) for p in mine),
+          flush=True)
+    return gate_outputs(sha, release, mine, True, output)
 
 
 def selected(registry, selection):
@@ -753,14 +849,71 @@ def selected(registry, selection):
             for s in json.loads(selection) if s["registry"] == registry]
 
 
-def preflight(registry, selection, status=published_on):
+def crate_exists(name):
+    """Whether crates.io has the crate at all (any version)."""
+    return http_status(f"https://crates.io/api/v1/crates/{quote(name)}")[0] == 200
+
+
+def preflight(registry, selection, status=published_on, exists=crate_exists, output=None):
     """Refuse, just before uploading, any selected version already published:
-    another run may have published it since the gate."""
+    another run may have published it since the gate. For crates.io, also
+    say which selected crates are new (their first version needs a token,
+    since Trusted Publishing needs the crate to exist): writes `new_crates`
+    (JSON), `new_crate` and `existing_crate` to GITHUB_OUTPUT."""
     chosen = selected(registry, selection)
     if out := [str(p) for p in chosen if status(p)]:
         raise RuntimeError(f"already on {registry}: {', '.join(out)}; a published version is permanent")
     print(f"to publish on {registry}: " + (", ".join(str(p) for p in chosen) or "nothing"), flush=True)
+    if registry == "crates.io":
+        new = [p.name for p in chosen if not exists(p.name)]
+        outputs = {"new_crates": json.dumps(new), "new_crate": str(bool(new)).lower(),
+                   "existing_crate": str(len(new) < len(chosen)).lower()}
+        target = output or os.environ.get("GITHUB_OUTPUT")
+        if target:
+            with open(target, "a", encoding="utf-8") as handle:
+                for key, value in outputs.items():
+                    handle.write(f"{key}={value}\n")
+        if new:
+            print("first versions (published with the new-crate token): " + ", ".join(new), flush=True)
     return chosen
+
+
+def publish_groups(chosen, new):
+    """[(credential, [crates])]: consecutive runs of `chosen`, in order, that
+    share a credential ("trusted" for crates already on crates.io, "new" for
+    first versions). Order is kept, so each crate follows what it depends on."""
+    groups = []
+    for package in chosen:
+        credential = "new" if package.name in new else "trusted"
+        if groups and groups[-1][0] == credential:
+            groups[-1][1].append(package.name)
+        else:
+            groups.append((credential, [package.name]))
+    return groups
+
+
+def publish_crates(selection, new_crates, trusted_token, new_token, runner=None):
+    """Publish the selected crates: one `cargo publish --dry-run` for all of
+    them, then one `cargo publish` per run of crates sharing a credential.
+    Refuses before uploading anything if a group's token is missing."""
+    runner = runner or run
+    chosen = selected("crates.io", selection)
+    new = set(json.loads(new_crates or "[]"))
+    groups = publish_groups(chosen, new)
+    tokens = {"trusted": trusted_token, "new": new_token}
+    if missing := [c for c, _ in groups if not tokens[c]]:
+        need = {"trusted": "the Trusted Publishing token (rust-lang/crates-io-auth-action)",
+                "new": "the new-crate token (the environment's CARGO_REGISTRY_TOKEN secret)"}
+        raise RuntimeError("cannot publish: missing " + " and ".join(need[c] for c in dict.fromkeys(missing)))
+    if not chosen:
+        print("nothing to publish on crates.io", flush=True)
+        return groups
+    every = [arg for p in chosen for arg in ("-p", p.name)]
+    runner(["cargo", "publish", "--dry-run", "--locked", *every], env={"CARGO_REGISTRY_TOKEN": ""})
+    for credential, crates in groups:
+        runner(["cargo", "publish", "--locked", *[a for c in crates for a in ("-p", c)]],
+               env={"CARGO_REGISTRY_TOKEN": tokens[credential]})
+    return groups
 
 
 def verify(registry, selection, status=published_on, timeout=900, sleep=time.sleep):
@@ -775,9 +928,71 @@ def verify(registry, selection, status=published_on, timeout=900, sleep=time.sle
     print(f"on {registry}: " + (", ".join(str(p) for p in chosen) or "nothing selected"), flush=True)
 
 
+def has_binary(manifest, read=None):
+    """Whether a Cargo package builds a binary: a [[bin]] table, or the
+    default src/main.rs beside its manifest."""
+    read = read or files_on_disk()
+    if tomllib.loads(read(manifest)).get("bin"):
+        return True
+    try:
+        read(str(PurePosixPath(manifest).parent / "src" / "main.rs"))
+        return True
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return False
+
+
+def consume(registry, selection, runner=None, read=None, tries=10, sleep=time.sleep):
+    """Use each selected package as a stranger would, from its registry, in a
+    fresh temporary directory with no registry credentials: crates.io installs
+    a crate with a binary at its exact version (`cargo install --locked`) and
+    checks that a new crate builds against a library; PyPI installs the version
+    into a new virtualenv; npm resolves it. A registry's index can lag behind
+    its API, so each attempt is retried."""
+    runner = runner or run
+    chosen = selected(registry, selection)
+    clean = {"CARGO_REGISTRY_TOKEN": "", "NODE_AUTH_TOKEN": "", "PYPI_API_TOKEN": ""}
+
+    def attempt(step, describe):
+        for n in range(tries):
+            try:
+                step()
+                return
+            except subprocess.CalledProcessError:
+                if n == tries - 1:
+                    raise RuntimeError(f"{describe} failed {tries} times") from None
+                sleep(30)
+
+    for package in chosen:
+        with tempfile.TemporaryDirectory(prefix="release-kit-consume-") as scratch:
+            here = Path(scratch)
+            if registry == "crates.io" and has_binary(package.manifest, read):
+                attempt(lambda: runner(["cargo", "install", package.name, "--version", f"={package.version}",
+                                        "--locked", "--root", str(here / "root")], cwd=scratch, env=clean),
+                        f"installing {package}")
+            elif registry == "crates.io":
+                runner(["cargo", "new", "--quiet", "--lib", "consumer"], cwd=scratch, env=clean)
+                consumer = str(here / "consumer")
+                attempt(lambda: runner(["cargo", "add", f"{package.name}@={package.version}"], cwd=consumer,
+                                       env=clean), f"adding {package}")
+                runner(["cargo", "check", "--quiet"], cwd=consumer, env=clean)
+            elif registry == "pypi":
+                runner([sys.executable, "-m", "venv", str(here / "venv")], env=clean)
+                python = here / "venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+                attempt(lambda: runner([str(python), "-m", "pip", "install", "--quiet", "--no-cache-dir",
+                                        f"{package.name}=={package.version}"], env=clean),
+                        f"installing {package}")
+            elif registry == "npm":
+                attempt(lambda: runner(["npm", "view", f"{package.name}@{package.version}", "version"],
+                                       cwd=scratch, env=clean), f"resolving {package}")
+            else:
+                continue  # github, vscode: `verify` has already seen the files
+            print(f"used   {package} as a consumer would", flush=True)
+    return chosen
+
+
 # ---------------------------------------------------------------------------
-# Installing: repositories use a copy of the kit (release-kit is private, and
-# GitHub lets public repositories use only public actions and workflows).
+# Installing: repositories use a copy of the kit, pinned and reviewable: a
+# repository's release changes only when it installs a newer kit.
 
 KIT = Path(__file__).resolve().parent.parent
 VENDOR = ".github/release-kit"
@@ -879,7 +1094,7 @@ def releases_tagged(existing, release_tag_pattern):
             try:
                 found[commit] = load(files_at(commit))
             except (subprocess.CalledProcessError, ValueError, tomllib.TOMLDecodeError):
-                continue
+                continue  # not a release-kit release (from before adoption): not resumed
     return found
 
 
@@ -939,12 +1154,15 @@ def wait_for(tag_name, packages, timeout, status=published_on, run=run_of, sleep
             print(f"{tag_name}: published " + ", ".join(str(p) for p in packages), flush=True)
             return
         if time.monotonic() > deadline:
+            still = latest and latest["status"] != "completed"
             raise RuntimeError(f"not published within {timeout // 60} minutes: "
-                               + ", ".join(str(p) for p in missing))
+                               + ", ".join(str(p) for p in missing)
+                               + (f". The run is still going ({latest['url']}); run `release.py tag` again "
+                                  "to keep waiting: it changes nothing while the run is live." if still else ""))
         sleep(30)
 
 
-def tag(commit=None, remote="origin", timeout=3600, dry_run=False, wanted=None,
+def tag(commit=None, remote="origin", timeout=10800, dry_run=False, wanted=None,
         status=published_on, run=run_of, wait=wait_for):
     """Tag the release on its commit and wait for it to be published."""
     existing = remote_tags(remote)
@@ -952,7 +1170,12 @@ def tag(commit=None, remote="origin", timeout=3600, dry_run=False, wanted=None,
     def binds(package, tagged):
         # A tag elsewhere holds the release there unless its run provably
         # published nothing; then the tag is moved.
-        return status(package) or not dead(run(load(files_at(tagged)).tag), tagged)
+        return status(package) or not dead(run(release_at(tagged, package).tag), tagged)
+
+    here = load(files_on_disk())
+    unpublished = [p for p in here.packages if not status(p)]
+    if foreign := not_its_own(here, existing, None, remote, unpublished):
+        raise RuntimeError(foreign_error(foreign, existing))
 
     sha, why = resolve(commit, wanted, remote, existing, binds, status)
     read = files_at(sha)
@@ -981,7 +1204,7 @@ def tag(commit=None, remote="origin", timeout=3600, dry_run=False, wanted=None,
                 print(f"wait   {package.tag}: tagged at {tagged[:12]}, which ships the same files; "
                       "waiting for its release run", flush=True)
                 if not dry_run:
-                    wait(load(files_at(tagged)).tag, [package], timeout, status)
+                    wait(release_at(tagged, package).tag, [package], timeout, status)
                 continue
             print(f"move   {package.tag}: the release run at {tagged[:12]} published nothing", flush=True)
             deletions.append(package.tag)
@@ -1065,11 +1288,14 @@ def main(argv=None):
     tagger.add_argument("--commit")
     tagger.add_argument("--release", dest="wanted")
     tagger.add_argument("--remote", default="origin")
-    tagger.add_argument("--timeout", type=int, default=3600, help="seconds to wait for the run")
+    tagger.add_argument("--timeout", type=int, default=10800,
+                        help="seconds to wait for the run (default 3 hours); tag again to keep waiting")
     tagger.add_argument("--dry-run", action="store_true")
     gater = commands.add_parser("gate")
     gater.add_argument("tag")
     gater.add_argument("--remote", default="origin")
+    gater.add_argument("--verify-only", action="store_true",
+                       help="select the release's published packages, to verify them again")
     planner = commands.add_parser("plan")
     planner.add_argument("--selection", required=True)
     builder = commands.add_parser("build")
@@ -1085,6 +1311,12 @@ def main(argv=None):
     verifier.add_argument("--registry", required=True, choices=REGISTRIES)
     verifier.add_argument("--selection", required=True)
     verifier.add_argument("--timeout", type=int, default=900)
+    consumer = commands.add_parser("consume")
+    consumer.add_argument("--registry", required=True, choices=REGISTRIES)
+    consumer.add_argument("--selection", required=True)
+    publisher = commands.add_parser("publish-crates")
+    publisher.add_argument("--selection", required=True)
+    publisher.add_argument("--new-crates", default="[]", help="preflight's new_crates output (JSON)")
     args = parser.parse_args(argv)
     try:
         if args.command == "check":
@@ -1099,7 +1331,7 @@ def main(argv=None):
         elif args.command == "tag":
             tag(args.commit, args.remote, args.timeout, args.dry_run, args.wanted)
         elif args.command == "gate":
-            gate(args.tag, args.remote)
+            gate(args.tag, args.remote, verify_only=args.verify_only)
         elif args.command == "plan":
             plan(args.selection)
         elif args.command == "build":
@@ -1116,6 +1348,12 @@ def main(argv=None):
             preflight(args.registry, args.selection)
         elif args.command == "verify":
             verify(args.registry, args.selection, timeout=args.timeout)
+        elif args.command == "consume":
+            consume(args.registry, args.selection)
+        elif args.command == "publish-crates":
+            # Tokens come from the environment, never the command line.
+            publish_crates(args.selection, args.new_crates, os.environ.get("RELEASE_TRUSTED_TOKEN", ""),
+                           os.environ.get("RELEASE_NEW_CRATE_TOKEN", ""))
     except (RuntimeError, ValueError, subprocess.CalledProcessError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

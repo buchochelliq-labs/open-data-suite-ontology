@@ -18,6 +18,9 @@ inputs:
   ovsx-token:
     description: An Open VSX token; empty skips Open VSX.
     default: ""
+  verify-only:
+    description: '"true" to skip the upload and only verify (a verify-only run).'
+    default: "false"
 runs:
   using: composite
   steps:
@@ -27,9 +30,14 @@ runs:
         DIR: ${{ inputs.dir }}
         VSCE_PAT: ${{ inputs.vsce-token }}
         OVSX_PAT: ${{ inputs.ovsx-token }}
+        VERIFY_ONLY: ${{ inputs.verify-only }}
       run: |
         set -euo pipefail
         kit="$GITHUB_ACTION_PATH/../scripts/release.py"
+        if [ "$VERIFY_ONLY" = true ]; then
+          python3 "$kit" verify --registry vscode --selection "$SELECTION"
+          exit 0
+        fi
         python3 "$kit" preflight --registry vscode --selection "$SELECTION"
         shopt -s nullglob
         jq -r '.[] | select(.registry == "vscode") | "\(.name)\t\(.version)\t\(.slug)"' <<<"$SELECTION" |

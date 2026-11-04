@@ -1,17 +1,23 @@
-name: release
-
-# Prebuilt `onto` binaries for Linux, macOS and Windows, released with the
-# buchochelliq-labs standard (https://github.com/buchochelliq-labs/release-kit).
+# Releases `onto`, with the buchochelliq-labs standard (release-kit): the
+# library crates and onto-cli on crates.io, and prebuilt `onto` binaries for
+# Linux, macOS and Windows on GitHub Releases. What is published is declared in
+# release-kit.yml; .github/release-kit/ is the installed kit (not edited).
 #
-# What is built and published is declared in release-kit.yml; the kit itself is
-# the installed copy in .github/release-kit/. On main, after the release PR
-# merges: `python3 .github/release-kit/scripts/release.py tag`. It
-# pushes the annotated tags v<version> (the GitHub release's tag, a record)
-# and release-<version>, which starts this run: the gate checks the tag once,
-# CI reruns on the tagged commit, release-kit builds the declared artifacts
-# from it, and the archives and their SHA-256 are attached to the release,
-# then downloaded again and checked. A failed run is finished by running `release.py tag`
-# again. Dispatching an existing release tag reruns it.
+# On main, after the release PR merges:
+#   python3 .github/release-kit/scripts/release.py tag
+# pushes the annotated tags (one per package, and release-<version>, which
+# starts this run): the gate checks the tag once, CI reruns on the tagged
+# commit, the binaries are built from it, then each registry gets what it does
+# not have yet, and each package is used as a stranger would. A failed run is
+# finished by running `release.py tag` again.
+#
+# One-time setup for crates.io: the `crates-io` environment (restricted to
+# release-* tags). A crate's first version needs an API token as its
+# CARGO_REGISTRY_TOKEN secret; after that, add each crate's Trusted Publisher
+# (repository, release.yml, environment crates-io) and remove the secret.
+#
+# Third-party actions are pinned to commits (the version is in the comment).
+name: release
 
 on:
   push:
@@ -21,6 +27,12 @@ on:
       tag:
         description: An existing release tag (release-X.Y.Z) to run again
         required: true
+      verify_only:
+        description: >-
+          Verify only: every package is already published (a run that failed
+          after uploading); check them again and upload nothing
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -37,50 +49,117 @@ jobs:
       sha: ${{ steps.gate.outputs.sha }}
       release: ${{ steps.gate.outputs.release }}
       selection: ${{ steps.gate.outputs.selection }}
+      verify-only: ${{ steps.gate.outputs.verify-only }}
       github: ${{ steps.gate.outputs.github }}
+      crates-io: ${{ steps.gate.outputs.crates-io }}
+      pypi: ${{ steps.gate.outputs.pypi }}
+      npm: ${{ steps.gate.outputs.npm }}
+      vscode: ${{ steps.gate.outputs.vscode }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           ref: refs/tags/${{ inputs.tag || github.ref_name }}
+          persist-credentials: false
       - id: gate
         uses: ./.github/release-kit/gate
         with:
           tag: ${{ inputs.tag || github.ref_name }}
+          verify-only: ${{ inputs.verify_only == true }}
 
-  # CI on the tagged commit (it reads the repository: the workflow's contents: read).
+  # The repository's own CI on the tagged commit: ci.yml needs
+  # `on: workflow_call` with a `ref` input it checks out. (Rename `ref` here
+  # if your ci.yml calls it something else.)
   ci:
     needs: gate
     uses: ./.github/workflows/ci.yml
     with:
       ref: ${{ needs.gate.outputs.sha }}
 
-  # Builds what release-kit.yml declares (onto for five targets) from the
-  # tagged commit.
+  # Builds what release-kit.yml's `artifacts` declare, for the packages due,
+  # from the tagged commit: one job per artifact and target, each running the
+  # artifact's `test` (if any) on what it built. Skipped in a verify-only run.
   build:
     needs: [gate, ci]
+    if: needs.gate.outputs.verify-only != 'true'
     uses: ./.github/workflows/release-kit-build.yml
     with:
       sha: ${{ needs.gate.outputs.sha }}
       selection: ${{ needs.gate.outputs.selection }}
 
-  # The only job that can write: it creates the release on v<version> and
-  # attaches the archives the build jobs produced.
   publish-github:
-    needs: [gate, build]
-    if: needs.gate.outputs.github == 'true'
+    needs: [gate, ci, build]
+    # After a successful build; in a verify-only run, after CI (build skipped).
+    if: >-
+      !cancelled() && needs.gate.outputs.github == 'true' && needs.ci.result == 'success'
+      && (needs.build.result == 'success'
+          || (needs.build.result == 'skipped' && needs.gate.outputs.verify-only == 'true'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.gate.outputs.sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install --quiet pyyaml
+      - if: needs.gate.outputs.verify-only != 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: release--*
           path: dist
       - uses: ./.github/release-kit/publish-github
         with:
           selection: ${{ needs.gate.outputs.selection }}
+          verify-only: ${{ needs.gate.outputs.verify-only }}
+
+  # crates.io publishes from source. Crates already on crates.io upload with
+  # Trusted Publishing; a crate's first version cannot (crates.io offers it
+  # only for an existing crate), so it uploads with the environment's
+  # CARGO_REGISTRY_TOKEN secret, which reaches the step only when the
+  # preflight found a new crate. Add each new crate's Trusted Publisher once
+  # it is up.
+  publish-crates:
+    # From source, but after the build: a release whose artifacts fail to
+    # build (or fail their tests) publishes nothing anywhere.
+    needs: [gate, ci, build]
+    if: >-
+      !cancelled() && needs.gate.outputs.crates-io == 'true' && needs.ci.result == 'success'
+      && (needs.build.result == 'success'
+          || (needs.build.result == 'skipped' && needs.gate.outputs.verify-only == 'true'))
+    runs-on: ubuntu-latest
+    environment: crates-io          # the Trusted Publisher is bound to it
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
+        with:
+          toolchain: stable
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: python3 -m pip install --quiet pyyaml
+      # Refuses a version already out, and says which crates are new.
+      - id: preflight
+        if: needs.gate.outputs.verify-only != 'true'
+        env:
+          SELECTION: ${{ needs.gate.outputs.selection }}
+        run: python3 .github/release-kit/scripts/release.py preflight --registry crates.io --selection "$SELECTION"
+      - id: auth
+        if: steps.preflight.outputs.existing_crate == 'true'
+        uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9 # v1.0.6
+      - uses: ./.github/release-kit/publish-crates
+        with:
+          selection: ${{ needs.gate.outputs.selection }}
+          new-crates: ${{ steps.preflight.outputs.new_crates || '[]' }}
+          token: ${{ steps.auth.outputs.token }}
+          new-crate-token: ${{ steps.preflight.outputs.new_crate == 'true' && secrets.CARGO_REGISTRY_TOKEN || '' }}
+          verify-only: ${{ needs.gate.outputs.verify-only }}

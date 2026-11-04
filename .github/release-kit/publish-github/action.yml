@@ -18,6 +18,9 @@ inputs:
   token:
     description: A token with contents write on this repository.
     default: ${{ github.token }}
+  verify-only:
+    description: '"true" to skip the upload and only verify (a verify-only run).'
+    default: "false"
 runs:
   using: composite
   steps:
@@ -28,9 +31,29 @@ runs:
         SELECTION: ${{ inputs.selection }}
         FILES: ${{ inputs.files }}
         DIR: ${{ inputs.dir }}
+        VERIFY_ONLY: ${{ inputs.verify-only }}
       run: |
         set -euo pipefail
         kit="$GITHUB_ACTION_PATH/../scripts/release.py"
+        # Verify as a stranger would: download what the release serves and check
+        # every .sha256 against its file. A verify-only run repeats this too, so a
+        # run that failed here is not passed by re-running it.
+        check_release() {
+          local tag=$1 check
+          check="$(mktemp -d)"
+          gh release download "$tag" --dir "$check"
+          ( cd "$check" && for sum in *.sha256; do
+              [ -e "$sum" ] || continue
+              read -r digest file < "$sum"
+              echo "$digest  ${file#\*}" | sha256sum -c -
+            done )
+        }
+        if [ "$VERIFY_ONLY" = true ]; then
+          python3 "$kit" verify --registry github --selection "$SELECTION"
+          jq -r '.[] | select(.registry == "github") | .tag' <<<"$SELECTION" |
+          while read -r tag; do check_release "$tag"; done
+          exit 0
+        fi
         python3 "$kit" preflight --registry github --selection "$SELECTION"
         shopt -s nullglob
         jq -r '.[] | select(.registry == "github") | "\(.name)\t\(.version)\t\(.tag)\t\(.slug)"' <<<"$SELECTION" |
@@ -43,14 +66,7 @@ runs:
           gh release view "$tag" >/dev/null 2>&1 ||
             gh release create "$tag" --verify-tag --title "$name $version" --generate-notes "${prerelease[@]}"
           gh release upload "$tag" "${files[@]}" --clobber
-          # Verify as a stranger would: download what the release now serves.
-          check="$(mktemp -d)"
-          gh release download "$tag" --dir "$check"
-          ( cd "$check" && for sum in *.sha256; do
-              [ -e "$sum" ] || continue
-              read -r digest file < "$sum"
-              echo "$digest  ${file#\*}" | sha256sum -c -
-            done )
+          check_release "$tag"
           echo "$name $version: published on $tag"
         done
         python3 "$kit" verify --registry github --selection "$SELECTION" --timeout 120

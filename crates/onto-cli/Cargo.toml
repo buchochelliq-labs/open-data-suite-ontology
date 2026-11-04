@@ -4,7 +4,9 @@ description = "The `onto` command: sync sources, inspect the ontology, review pr
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-publish.workspace = true
+# Published to crates.io (release-kit.yml).
+publish = true
+readme = "README.md"
 license.workspace = true
 
 [[bin]]
