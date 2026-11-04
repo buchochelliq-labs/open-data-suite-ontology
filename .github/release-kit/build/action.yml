@@ -10,25 +10,27 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
         python-version: "3.12"
     - if: fromJSON(inputs.job).kind == 'rust-binary'
-      uses: dtolnay/rust-toolchain@stable
+      # Pinned by commit; the toolchain is an input, so it stays stable.
+      uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master
       with:
+        toolchain: stable
         targets: ${{ fromJSON(inputs.job).target }}
     - if: fromJSON(inputs.job).kind == 'vsix'
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version: "24"
     - if: fromJSON(inputs.job).kind == 'maturin'
-      uses: PyO3/maturin-action@v1
+      uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
       with:
         target: ${{ fromJSON(inputs.job).target }}
         args: --release --out dist -m ${{ fromJSON(inputs.job).cargo }}
         manylinux: auto
     - if: fromJSON(inputs.job).kind == 'maturin-sdist'
-      uses: PyO3/maturin-action@v1
+      uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
       with:
         command: sdist
         args: --out dist -m ${{ fromJSON(inputs.job).cargo }}

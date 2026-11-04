@@ -17,7 +17,7 @@ see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
 ## Quick start
 
 ```sh
-cargo install --path crates/onto-cli          # installs `onto`
+cargo install onto-cli                        # installs `onto` (from 0.1.1)
 cd your-repo
 onto init --central https://github.com/buchochelliq-labs/open-data-suite-ontology
 echo .onto/ >> .gitignore
@@ -52,7 +52,10 @@ agent (it needs `onto` and `ods` on PATH):
 ```
 
 Prebuilt `onto` binaries for Linux, macOS and Windows are attached to each
-[release](https://github.com/buchochelliq-labs/open-data-suite-ontology/releases).
+[release](https://github.com/buchochelliq-labs/open-data-suite-ontology/releases), and
+the crates are on crates.io (`onto-cli` and its libraries `onto-core`, `onto-store`,
+`onto-ods`, `onto-workspace`, `onto-mcp`). From a checkout, `cargo install --path
+crates/onto-cli` installs `onto` too.
 Releases follow the buchochelliq-labs standard,
 [release-kit](https://github.com/buchochelliq-labs/release-kit): `release-kit.yml`
 says what is published and built, and `release.py tag` on `main` starts the release.

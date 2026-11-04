@@ -10,10 +10,38 @@
 # release on v<version> with every archive and its SHA-256.
 
 packages:
+  # The library crates and the CLI on crates.io, each after the crates it depends on
+  # (`cargo install onto-cli` installs the `onto` command; the name `onto` is taken).
+  - name: onto-core
+    registry: crates.io
+    manifest: crates/onto-core/Cargo.toml
+    version: "0.1.1"
+  - name: onto-store
+    registry: crates.io
+    manifest: crates/onto-store/Cargo.toml
+    version: "0.1.1"
+  - name: onto-ods
+    registry: crates.io
+    manifest: crates/onto-ods/Cargo.toml
+    version: "0.1.1"
+  - name: onto-workspace
+    registry: crates.io
+    manifest: crates/onto-workspace/Cargo.toml
+    version: "0.1.1"
+  - name: onto-mcp
+    registry: crates.io
+    manifest: crates/onto-mcp/Cargo.toml
+    version: "0.1.1"
+  - name: onto-cli
+    registry: crates.io
+    manifest: crates/onto-cli/Cargo.toml
+    version: "0.1.1"
+
+  # The prebuilt `onto` binaries on GitHub Releases; it names the release.
   - name: onto
     registry: github
     manifest: crates/onto-cli/Cargo.toml
-    version: "0.1.0"
+    version: "0.1.1"
     tag: "v{version}"
     # What the binary is built from, including the skills and agent it embeds.
     paths: ["crates/**", "Cargo.toml", "Cargo.lock", "skills/**", ".github/agents/**"]

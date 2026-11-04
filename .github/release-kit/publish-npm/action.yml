@@ -1,6 +1,6 @@
 name: publish to npm
 description: >-
-  Publish the selected npm packages in RELEASES.toml order, each from its
+  Publish the selected npm packages in release-kit.yml order, each from its
   manifest's directory, with provenance; then wait until npm serves them.
   Trusted Publishing needs `id-token: write` and npm 11.5 or later; without
   it, pass a token.
@@ -11,6 +11,9 @@ inputs:
   token:
     description: An npm automation token, when Trusted Publishing is not set up.
     default: ""
+  verify-only:
+    description: '"true" to skip the upload and only verify (a verify-only run).'
+    default: "false"
 runs:
   using: composite
   steps:
@@ -18,9 +21,15 @@ runs:
       env:
         SELECTION: ${{ inputs.selection }}
         NODE_AUTH_TOKEN: ${{ inputs.token }}
+        VERIFY_ONLY: ${{ inputs.verify-only }}
       run: |
         set -euo pipefail
         kit="$GITHUB_ACTION_PATH/../scripts/release.py"
+        if [ "$VERIFY_ONLY" = true ]; then
+          python3 "$kit" verify --registry npm --selection "$SELECTION"
+          python3 "$kit" consume --registry npm --selection "$SELECTION"
+          exit 0
+        fi
         python3 "$kit" preflight --registry npm --selection "$SELECTION"
         if [ -n "$NODE_AUTH_TOKEN" ]; then
           echo "//registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}" > "$RUNNER_TEMP/.npmrc"
@@ -30,3 +39,4 @@ runs:
           ( cd "$(dirname "$manifest")" && npm publish --provenance --access public )
         done
         python3 "$kit" verify --registry npm --selection "$SELECTION"
+        python3 "$kit" consume --registry npm --selection "$SELECTION"
