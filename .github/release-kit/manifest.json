@@ -1,13 +1,13 @@
 {
   "source": "buchochelliq-labs/release-kit",
-  "version": "v1.1.0-4-gcc97d96",
-  "commit": "cc97d964049a43ae600cd15e0f3f44268d1e64b2",
+  "version": "v1.2.0-2-g472fb12",
+  "commit": "472fb1299defdd6020bb42b952b357625b4cd99d",
   "files": {
     ".github/release-kit/build/action.yml": "cda2e8e68024c23d799b22a393c6de886d7ce116693ebead91451989495d9e4c",
     ".github/release-kit/gate/action.yml": "5021cc6d00330eae7d2113d3e9266c4e4c64f98831de011571ab53e3f7bb4384",
     ".github/release-kit/plan/action.yml": "6f3d1c5d5ad0f750c5f0ecf648ca99debc4804a5bf799594094aefa6a8638673",
     ".github/release-kit/publish-crates/action.yml": "f43c19087e9d936fe668fa2524630b6d74d27271d1e79e25d4754c21058ab7f4",
-    ".github/release-kit/publish-github/action.yml": "9f9f5e8282c5f6c932d10aca8fb2a074a6130e6a10fb7bd0af5330d431eb44d8",
+    ".github/release-kit/publish-github/action.yml": "584f8c59494dbc48e3bab4f9246f5f4e447720d4503162d32ff66229190e275d",
     ".github/release-kit/publish-npm/action.yml": "bbe82df41a2bda2448c25ae1be623e572e648e9b58bc191ab61562ef54814438",
     ".github/release-kit/publish-pypi/action.yml": "299ab9258b19d001fc26aaf56ab55afcd8ea3f80d05fefc77d0eb8de8c1d21a9",
     ".github/release-kit/publish-vscode/action.yml": "bdd223f6cd73ef675f0fd9226a0e320d782ceffb8390364837c21ec0cdfa1f40",
