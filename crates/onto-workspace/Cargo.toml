@@ -4,7 +4,7 @@ description = "Configured sources, sync, lockfile and proposal review for an ont
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-# Published to crates.io (release-kit.yml).
+# Published to crates.io (rab.yml).
 publish = true
 license.workspace = true
 

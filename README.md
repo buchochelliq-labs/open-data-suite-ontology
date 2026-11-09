@@ -57,8 +57,9 @@ the crates are on crates.io (`onto-cli` and its libraries `onto-core`, `onto-sto
 `onto-ods`, `onto-workspace`, `onto-mcp`). From a checkout, `cargo install --path
 crates/onto-cli` installs `onto` too.
 Releases follow the buchochelliq-labs standard,
-[release-kit](https://github.com/buchochelliq-labs/release-kit): `release-kit.yml`
-says what is published and built, and `release.py tag` on `main` starts the release.
+[rab, the Release Asset Bundle](https://github.com/buchochelliq-labs/release-asset-bundle):
+`rab.yml` says what is published and built, and
+`python3 .github/rab/scripts/release.py tag` on `main` starts the release.
 
 Agents can read (`ontology_status`, `ontology_overview`, `ontology_search`,
 `ontology_entity`, `ontology_neighbors`, `ontology_context`) and propose

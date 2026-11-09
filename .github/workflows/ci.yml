@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-  # The release workflow reruns CI on the tagged commit (release-kit standard).
+  # The release workflow reruns CI on the tagged commit (rab, the buchochelliq-labs release standard).
   workflow_call:
     inputs:
       ref:
@@ -43,11 +43,11 @@ jobs:
       # OpenDataSuite for the onto-ods integration test (pinned like ods-erd).
       - run: pip install opendatasuite==0.0.2
       # The release configuration matches the manifests, and the installed
-      # release-kit copy is unmodified (it changes only by installing again).
+      # rab copy is unmodified (it changes only by installing again).
       - run: pip install pyyaml
-      - run: python3 .github/release-kit/scripts/release.py check
-      - run: python3 .github/release-kit/scripts/release.py vendored
-      # Package every published crate as crates.io would (release-kit.yml).
+      - run: python3 .github/rab/scripts/release.py check
+      - run: python3 .github/rab/scripts/release.py vendored
+      # Package every published crate as crates.io would (rab.yml).
       - run: cargo publish --workspace --locked --dry-run
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features

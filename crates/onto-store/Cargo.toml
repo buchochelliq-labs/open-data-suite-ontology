@@ -4,7 +4,7 @@ description = "SQLite store with lexical search and bounded traversal for ontolo
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-# Published to crates.io (release-kit.yml).
+# Published to crates.io (rab.yml).
 publish = true
 license.workspace = true
 
