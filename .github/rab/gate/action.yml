@@ -1,4 +1,4 @@
-name: release gate
+name: "rab: release gate"
 description: >-
   Check a release tag before anything is built: annotated, on the default
   branch, recording its release and commit, not splitting its release, and
@@ -7,6 +7,11 @@ inputs:
   tag:
     description: The release tag (release-X.Y.Z), as pushed or dispatched.
     required: true
+  verify-only:
+    description: >-
+      "true" for a verify-only run: select the release's published packages to
+      verify them again, and build and upload nothing.
+    default: "false"
 outputs:
   sha:
     description: The tagged commit.
@@ -17,8 +22,13 @@ outputs:
   selection:
     description: JSON list of the packages to publish (name, registry, version, manifest, tag), in order.
     value: ${{ steps.gate.outputs.selection }}
+  verify-only:
+    description: '"true" in a verify-only run.'
+    value: ${{ steps.gate.outputs.verify-only }}
   github:
-    description: '"true" when a GitHub Releases package is due.'
+    description: >-
+      "true" when a GitHub Releases package is due (not one selected only for
+      its Homebrew or Chocolatey channel).
     value: ${{ steps.gate.outputs.github }}
   crates-io:
     description: '"true" when a crates.io package is due.'
@@ -32,11 +42,21 @@ outputs:
   vscode:
     description: '"true" when a VS Code Marketplace extension is due.'
     value: ${{ steps.gate.outputs.vscode }}
+  homebrew:
+    description: >-
+      "true" when a github package's Homebrew formula is due: with its release,
+      or after it, when the tap has neither the version nor its pull request.
+    value: ${{ steps.gate.outputs.homebrew }}
+  chocolatey:
+    description: >-
+      "true" when a github package's Chocolatey package is due: with its
+      release, or after it, until the community repository has accepted it.
+    value: ${{ steps.gate.outputs.chocolatey }}
 runs:
   using: composite
   steps:
-    # release.py reads release-kit.yml with PyYAML.
-    - uses: actions/setup-python@v5
+    # release.py reads rab.yml with PyYAML.
+    - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
       with:
         python-version: "3.12"
     - shell: bash
@@ -46,5 +66,11 @@ runs:
     - id: gate
       shell: bash
       env:
+        # Reads GitHub releases, and a Homebrew tap's formula and pull requests.
+        GH_TOKEN: ${{ github.token }}
         RELEASE_TAG: ${{ inputs.tag }}
-      run: python3 "$GITHUB_ACTION_PATH/../scripts/release.py" gate "$RELEASE_TAG"
+        VERIFY_ONLY: ${{ inputs.verify-only }}
+      run: |
+        set -euo pipefail
+        flags=(); [ "$VERIFY_ONLY" = true ] && flags=(--verify-only)
+        python3 "$GITHUB_ACTION_PATH/../scripts/release.py" gate "$RELEASE_TAG" "${flags[@]}"

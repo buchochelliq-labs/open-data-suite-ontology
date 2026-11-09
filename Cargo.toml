@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 # OpenDataSuite crates (and rs-rich) require 1.90.
 rust-version = "1.90"
@@ -12,15 +12,15 @@ license = "Apache-2.0"
 repository = "https://github.com/buchochelliq-labs/open-data-suite-ontology"
 
 [workspace.dependencies]
-onto-core = { path = "crates/onto-core" }
-onto-store = { path = "crates/onto-store" }
-onto-workspace = { path = "crates/onto-workspace" }
-onto-ods = { path = "crates/onto-ods" }
+onto-core = { path = "crates/onto-core", version = "0.1.1" }
+onto-store = { path = "crates/onto-store", version = "0.1.1" }
+onto-workspace = { path = "crates/onto-workspace", version = "0.1.1" }
+onto-ods = { path = "crates/onto-ods", version = "0.1.1" }
 
 # OpenDataSuite: the ontology consumes its typed outputs rather than re-deriving them.
-# Pinned to a release; ODS is 0.0.x and its interfaces may change between releases.
-ods-erd = { git = "https://github.com/buchochelliq-labs/open-data-suite", tag = "v0.0.2" }
-onto-mcp = { path = "crates/onto-mcp" }
+# From crates.io, where ODS publishes every crate at its product version (ODS ADR-0035).
+ods-erd = "0.1.3"
+onto-mcp = { path = "crates/onto-mcp", version = "0.1.1" }
 onto-testkit = { path = "crates/onto-testkit" }
 
 anyhow = "1"

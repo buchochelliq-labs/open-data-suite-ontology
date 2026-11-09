@@ -1,7 +1,7 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "onto",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Ground data-model design in your team's ontology: the onto MCP server, OpenDataSuite's ods server, and the ontology-grounding and steno skills. Needs the onto and ods executables on PATH and an onto.toml in the project (onto init).",
   "author": {
     "name": "buchochelliq-labs"

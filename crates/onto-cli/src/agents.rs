@@ -15,9 +15,12 @@ use serde_json::{Value, json};
 /// Where `onto sync` writes the digest, relative to the workspace root.
 pub const DIGEST_PATH: &str = ".onto/context.md";
 
-const GROUNDING_SKILL: &str = include_str!("../../../skills/ontology-grounding/SKILL.md");
-const STENO_SKILL: &str = include_str!("../../../skills/steno/SKILL.md");
-const MODELLING_AGENT: &str = include_str!("../../../.github/agents/ontology-modelling.agent.md");
+// Copies of the repository's skills/ and .github/agents/, inside the crate so the
+// published package carries them (crates.io packages only the crate's directory).
+// tests/assets.rs fails when a copy drifts from its source.
+const GROUNDING_SKILL: &str = include_str!("../assets/skills/ontology-grounding/SKILL.md");
+const STENO_SKILL: &str = include_str!("../assets/skills/steno/SKILL.md");
+const MODELLING_AGENT: &str = include_str!("../assets/agents/ontology-modelling.agent.md");
 
 const BEGIN: &str = "<!-- onto:begin (written by `onto init --agents`; edits inside are replaced) -->";
 const END: &str = "<!-- onto:end -->";
