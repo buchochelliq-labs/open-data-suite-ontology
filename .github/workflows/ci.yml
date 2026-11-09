@@ -47,6 +47,8 @@ jobs:
       - run: pip install pyyaml
       - run: python3 .github/release-kit/scripts/release.py check
       - run: python3 .github/release-kit/scripts/release.py vendored
+      # Package every published crate as crates.io would (release-kit.yml).
+      - run: cargo publish --workspace --locked --dry-run
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features
       # Tier 1 (scripted scenarios, replay, asset checks) and the model loop

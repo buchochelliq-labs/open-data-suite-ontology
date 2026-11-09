@@ -1246,8 +1246,9 @@ dependencies = [
 
 [[package]]
 name = "ods-erd"
-version = "0.1.2"
-source = "git+https://github.com/buchochelliq-labs/open-data-suite?rev=8936e48fa3570cf8606bc0184e9aa4c45a0bafc0#8936e48fa3570cf8606bc0184e9aa4c45a0bafc0"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b9f9c8287008f7d160a05fd89fe54a9a08076f80501b0cac8c5d35270d86886"
 dependencies = [
  "serde",
  "serde_json",
