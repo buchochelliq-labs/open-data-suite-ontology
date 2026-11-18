@@ -124,6 +124,21 @@ for current months, while `saas-downgrade-not-churn` needs it while it is
 open. Run them with `--task saas`. Its
 [README](../fixtures/saas/README.md) says how to rebuild its dbt artifacts.
 
+### Team wiki background
+
+Two `saas-wiki-*` tasks run on a variant (`overlay: saas-team-wiki`) that adds
+the team's markdown wiki as a `wiki` source (#49). Wiki articles are
+unreviewed background, so they are kept apart from the agreed facts and left
+out of the digest:
+
+| Task | What it checks |
+|---|---|
+| `saas-wiki-annual-plans-history` | Why annual plans count at a twelfth is only in a wiki article. The agent gives the story and says it is wiki background, not the official record |
+| `saas-wiki-stale-article` | A 2024 article says MRR includes setup fees; the reviewed definition excludes one-off charges. The agent follows the reviewed definition and treats the article as outdated background |
+
+Only conditions with the ontology's tools can find the articles: the digest
+leaves them out, and ODS does not read the wiki.
+
 ### A real project: Tuva
 
 `fixtures/tuva` is the open-source Tuva healthcare data model with a made-up

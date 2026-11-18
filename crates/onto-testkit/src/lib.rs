@@ -2,9 +2,10 @@
 //!
 //! Three tiers share one [`Session`] and [`Transcript`] format:
 //! 1. [`scenario`]: scripted YAML scenarios, deterministic, every PR.
-//! 2. [`agent`] (feature `llm`): a real model behind an OpenAI-compatible API
+//! 2. `agent` (feature `llm`): a real model behind an OpenAI-compatible API
 //!    (a small local model in CI) with a scripted human, or a second model
-//!    playing the person ([`human`]); assertions are invariants.
+//!    playing the person (`human`); assertions are invariants. (Not links:
+//!    the modules exist only with the feature.)
 //! 3. Recorded transcripts from either tier can be replayed with [`replay`].
 
 #[cfg(feature = "llm")]

@@ -51,6 +51,9 @@ jobs:
       - run: cargo publish --workspace --locked --dry-run
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --all-features
+      - run: cargo doc --workspace --no-deps --all-features
+        env:
+          RUSTDOCFLAGS: -D warnings
       # Tier 1 (scripted scenarios, replay, asset checks) and the model loop
       # against a fake endpoint. The real-model episode skips without ONTO_LLM_BASE_URL.
       - run: cargo test --workspace --all-features
