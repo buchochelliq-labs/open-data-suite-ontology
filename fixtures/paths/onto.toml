@@ -3,10 +3,18 @@
 
 [resolution]
 mode = "priority"
-priority = ["repo"]
+priority = ["repo", "central"]
 
 [[source]]
 id = "repo"
 layer = "repository"
 kind = "pack"
 path = ".ontology"
+
+# A second team pack, lower in priority: where it disagrees with repo it
+# loses, and where repo's fact has ended it is the current source.
+[[source]]
+id = "central"
+layer = "central"
+kind = "pack"
+path = "central"

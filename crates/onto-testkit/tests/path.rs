@@ -105,3 +105,27 @@ async fn the_pilot_connects_board_metrics_to_accounts_through_mrr() {
     );
     session.close().await.unwrap();
 }
+
+#[tokio::test]
+async fn steps_use_only_current_usable_values_and_their_current_sources() {
+    let fixture = Fixture::new("paths").unwrap();
+    let mut session = Session::start(&fixture).await.unwrap();
+
+    // central's owner lost to repo's on a single-valued predicate: not a connection.
+    let rejected = path(&mut session, json!({ "from": "team:sales", "to": "concept:invoice", "max_hops": 1 })).await;
+    assert_eq!(rejected["found"], false, "{rejected}");
+    // team:finance has no facts of its own, only relationships pointing to it: still reachable.
+    let kept = path(&mut session, json!({ "from": "team:finance", "to": "concept:invoice", "max_hops": 1 })).await;
+    assert_eq!(steps(&kept)[0], vec!["concept:invoice primary_owner → team:finance [repo reviewed]"], "{kept}");
+
+    // An unresolved disagreement is a step only as a disputed one.
+    let disputed = path(&mut session, json!({ "from": "concept:refund", "to": "concept:payment" })).await;
+    let step = &steps(&disputed)[0][0];
+    assert!(step.starts_with("concept:refund reverses → concept:payment") && step.contains("DISPUTED"), "{disputed}");
+    assert!(disputed["note"].as_str().unwrap().contains("show both and ask"), "{disputed}");
+
+    // repo's statement ended in 2020; only central, which still asserts it, is cited.
+    let renewal = path(&mut session, json!({ "from": "concept:renewal", "to": "concept:contract" })).await;
+    assert_eq!(steps(&renewal)[0], vec!["concept:renewal renews → concept:contract [central declared]"], "{renewal}");
+    session.close().await.unwrap();
+}

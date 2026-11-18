@@ -11,9 +11,9 @@
 //! Steps from OpenDataSuite are dbt structure (columns and keys), labelled as
 //! such: a path is never lineage.
 
-use std::collections::{BTreeSet, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 
-use onto_core::{EntityView, Object, Value, vocab};
+use onto_core::{ConflictStatus, EntityView, Object, Value, vocab};
 use onto_store::{Edge, Store};
 use onto_workspace::{Workspace, compact, issues};
 use schemars::JsonSchema;
@@ -61,16 +61,25 @@ pub struct PathResponse {
     pub notice: String,
 }
 
-/// The relationships an entity asserts now, as (predicate, object, qualifiers).
-type Current = BTreeSet<(String, String, String)>;
+/// A relationship an entity asserts now, keyed by (predicate, object,
+/// qualifiers): its value with only the sources that assert it now, and
+/// whether sources disagree on it with nothing to settle it.
+type Current = BTreeMap<(String, String, String), (Value, bool)>;
 
+fn key(predicate: &str, object: &str, qualifiers: &BTreeMap<String, serde_json::Value>) -> (String, String, String) {
+    (predicate.to_string(), object.to_string(), serde_json::to_string(qualifiers).unwrap_or_default())
+}
+
+/// Usable values only: a candidate source priority rejected is not a step.
+/// An unresolved conflict's candidates are steps, marked as disputed.
 fn current(view: &EntityView) -> Current {
-    let mut out = BTreeSet::new();
+    let mut out = BTreeMap::new();
     for property in &view.properties {
-        let values = property.values.iter().chain(property.conflict.iter().flat_map(|c| c.candidates.iter()));
-        for value in values {
+        let unresolved = property.conflict.as_ref().filter(|c| c.status == ConflictStatus::Unresolved);
+        let values = property.values.iter().map(|v| (v, false)).chain(unresolved.iter().flat_map(|c| c.candidates.iter().map(|v| (v, true))));
+        for (value, disputed) in values {
             if let Object::Entity(target) = &value.object {
-                out.insert((property.predicate.clone(), target.clone(), serde_json::to_string(&value.qualifiers).unwrap_or_default()));
+                out.insert(key(&property.predicate, target, &value.qualifiers), (value.clone(), disputed));
             }
         }
     }
@@ -89,7 +98,9 @@ pub fn find(
     let max_hops = req.max_hops.unwrap_or(DEFAULT_HOPS).clamp(1, MAX_HOPS) as usize;
     let mut not_found = Vec::new();
     for id in [&req.from, &req.to] {
-        if !store.entity_exists(id).map_err(err)? {
+        // An entity named only as a relationship's target (a team an asset is
+        // owned by) has no facts of its own, but a path can still reach it.
+        if !store.entity_exists(id).map_err(err)? && store.edges_of(id).map_err(err)?.is_empty() {
             let close: Vec<String> = store.search(id, 3).map_err(err)?.into_iter().map(|h| h.id).collect();
             not_found.push(if close.is_empty() { id.clone() } else { format!("{id} (closest: {})", close.join(", ")) });
         }
@@ -108,8 +119,7 @@ pub fn find(
         if !asserted.contains_key(&edge.subject) {
             asserted.insert(edge.subject.clone(), current(&resolve(&edge.subject)?));
         }
-        let key = (edge.predicate.clone(), edge.object.clone(), serde_json::to_string(&edge.qualifiers).unwrap_or_default());
-        Ok(asserted[&edge.subject].contains(&key))
+        Ok(asserted[&edge.subject].contains_key(&key(&edge.predicate, &edge.object, &edge.qualifiers)))
     };
 
     // Breadth-first by layers, keeping every edge that reaches a node at its
@@ -171,6 +181,7 @@ pub fn find(
     // Rebuild paths backwards from `to`, in a stable order.
     let mut paths: Vec<Vec<Edge>> = Vec::new();
     let mut total = 0usize;
+    let mut counted_all = true;
     let mut stack: Vec<(String, Vec<Edge>)> = vec![(req.to.clone(), Vec::new())];
     while let Some((node, suffix)) = stack.pop() {
         if node == req.from {
@@ -190,6 +201,7 @@ pub fn find(
         }
         // Counting every path of a dense graph is not worth the time.
         if total > 50 {
+            counted_all = false;
             break;
         }
     }
@@ -197,6 +209,7 @@ pub fn find(
     let ods: BTreeSet<String> =
         workspace.config.sources.iter().filter(|s| matches!(s.kind, onto_workspace::SourceKind::Ods { .. })).map(|s| s.id.clone()).collect();
     let mut uses_ods = false;
+    let mut disputed_any = false;
     let paths: Vec<Path> = paths
         .into_iter()
         .map(|edges| Path {
@@ -204,22 +217,33 @@ pub fn find(
             steps: edges
                 .iter()
                 .map(|edge| {
-                    let dbt = edge.sources.iter().all(|p| ods.contains(&p.source_id));
+                    // Cite only the sources that assert the step now.
+                    let (value, disputed) = &asserted[&edge.subject][&key(&edge.predicate, &edge.object, &edge.qualifiers)];
+                    let dbt = value.sources.iter().all(|p| ods.contains(&p.source_id));
                     uses_ods |= dbt;
-                    let value = Value {
-                        object: Object::Entity(edge.object.clone()),
-                        qualifiers: edge.qualifiers.clone(),
-                        valid: Default::default(),
-                        sources: edge.sources.clone(),
-                    };
-                    format!("{} {}{}", edge.subject, compact::line(&edge.predicate, &value), if dbt { " (dbt structure)" } else { "" })
+                    disputed_any |= disputed;
+                    let mut line = format!("{} {}", edge.subject, compact::line(&edge.predicate, value));
+                    if dbt {
+                        line.push_str(" (dbt structure)");
+                    }
+                    if *disputed {
+                        line.push_str(" (DISPUTED: sources disagree on this relationship, UNRESOLVED)");
+                    }
+                    line
                 })
                 .collect(),
         })
         .collect();
     let mut notes = Vec::new();
+    if truncated {
+        notes.push(format!("the search stopped at its limit of {MAX_EXPANDED} entities, so other paths of this length may exist"));
+    }
     if total > paths.len() {
-        notes.push(format!("{} more paths of the same length", total - paths.len()));
+        let more = total - paths.len();
+        notes.push(if counted_all { format!("{more} more paths of the same length") } else { format!("at least {more} more paths of the same length") });
+    }
+    if disputed_any {
+        notes.push("a DISPUTED step depends on a relationship the sources disagree on: show both and ask, do not treat the path as settled".to_string());
     }
     if uses_ods {
         notes.push("steps marked dbt structure come from OpenDataSuite (columns and keys); they are not lineage, ask ods_lineage for that".to_string());

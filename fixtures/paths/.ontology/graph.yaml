@@ -53,3 +53,22 @@ entities:
     relations:
       - { predicate: affects, target: concept:island }
       - { predicate: affects, target: concept:order }
+  # Single-valued: central's owner loses to repo's, so it is not a step.
+  - id: concept:invoice
+    relations:
+      - { predicate: primary_owner, target: team:finance }
+  # The same source gives two values with nothing to settle them: disputed.
+  - id: concept:refund
+    label: Refund
+    relations:
+      - { predicate: reverses, target: concept:invoice }
+      - { predicate: reverses, target: concept:payment }
+  - { id: concept:payment, label: Payment }
+  # repo's statement has ended; central still asserts it.
+  - id: concept:renewal
+    label: Renewal
+    relations:
+      - { predicate: renews, target: concept:contract, valid: { until: "2020-01-01" } }
+predicates:
+  - { id: primary_owner, cardinality: one }
+  - { id: reverses, cardinality: one }
