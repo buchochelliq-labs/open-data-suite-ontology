@@ -51,6 +51,10 @@ relationships are business assertions, not lineage or foreign keys.
   which is right. Say who can settle it (the owners or teams the sources name)
   and how to proceed meanwhile (e.g. show both figures, labelled). Propose a
   resolution only once the user says which one their team has agreed.
+- Wiki articles (`background`, type `Document`) are unreviewed background:
+  cite them as "the team wiki says …", never as an agreed fact. When one
+  disagrees with a team fact, use the team fact and mention the article. An
+  article marked `missing_provenance` cites nothing; say so if you rely on it.
 - Warn about open known issues on the models you use, not fixed ones.
 - Apply `team_standards` (team-wide standards and decisions) to everything you
   design, even when no model you looked up mentions them.

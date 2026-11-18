@@ -10,6 +10,7 @@ use crate::git::GitSource;
 use crate::local::{LocalConfig, Trust, TrustedCommand};
 use crate::lock::{Lock, LockedSource};
 use crate::pack::PackSource;
+use crate::wiki::{LinkIndex, WikiSource};
 
 /// Directory, relative to the workspace root, for machine-local state.
 pub const STATE_DIR: &str = ".onto";
@@ -173,7 +174,21 @@ impl Workspace {
         Ok(())
     }
 
-    fn build(&self, source: &SourceConfig, lock: Option<&Lock>, locked: bool) -> Result<Box<dyn Source>> {
+    /// A path from `onto.toml`: relative to the workspace root, or to the
+    /// home directory with a leading `~/` (where llm-wiki keeps its hub).
+    pub fn resolve_path(&self, path: &str) -> PathBuf {
+        match (path.strip_prefix("~/"), std::env::var_os("HOME")) {
+            (Some(rest), Some(home)) => PathBuf::from(home).join(rest),
+            _ => self.root.join(path),
+        }
+    }
+
+    /// Ids of the configured wiki sources.
+    pub fn wiki_sources(&self) -> std::collections::BTreeSet<String> {
+        self.config.sources.iter().filter(|s| matches!(s.kind, SourceKind::Wiki { .. })).map(|s| s.id.clone()).collect()
+    }
+
+    fn build(&self, store: &Store, source: &SourceConfig, lock: Option<&Lock>, locked: bool) -> Result<Box<dyn Source>> {
         Ok(match &source.kind {
             SourceKind::Pack { path } => Box::new(PackSource::new(&source.id, source.layer, self.root.join(path))),
             SourceKind::Git { url, rev, path } => {
@@ -199,6 +214,13 @@ impl Workspace {
                 target_dir: target_dir.as_ref().map(|t| self.root.join(t)),
                 infer: *infer,
             }),
+            SourceKind::Wiki { path, authority } => Box::new(WikiSource {
+                id: source.id.clone(),
+                layer: source.layer,
+                dir: self.resolve_path(path),
+                authority: *authority,
+                index: LinkIndex::from_store(store, &self.wiki_sources())?,
+            }),
             SourceKind::Command { command, authority } => {
                 Box::new(CommandSource { id: source.id.clone(), layer: source.layer, command: command.clone(), cwd: self.root.clone(), authority: *authority })
             }
@@ -212,7 +234,11 @@ impl Workspace {
         let mut new_lock = Lock { version: 1, sources: Vec::new() };
         let mut reports = Vec::new();
 
-        for source in &self.config.sources {
+        // Wiki sources go last: their links are matched against what the
+        // other sources hold after this sync.
+        let mut order: Vec<&SourceConfig> = self.config.sources.iter().filter(|s| !matches!(s.kind, SourceKind::Wiki { .. })).collect();
+        order.extend(self.config.sources.iter().filter(|s| matches!(s.kind, SourceKind::Wiki { .. })));
+        for source in order {
             let selected = options.only.as_ref().is_none_or(|only| only.contains(&source.id));
             if !selected {
                 if let Some(previous) = lock.as_ref().and_then(|l| l.get(&source.id, url_of(source))) {
@@ -237,6 +263,10 @@ impl Workspace {
             reports.push(SyncReport { source_id: source.id.clone(), outcome });
         }
 
+        let position = |id: &str| self.config.sources.iter().position(|s| s.id == id);
+        reports.sort_by_key(|r| position(&r.source_id));
+        new_lock.sources.sort_by_key(|s| position(&s.id));
+
         // A source disabled on this machine keeps its pin for everyone else.
         if let Some(lock) = &lock {
             for previous in lock.sources.iter().filter(|s| self.disabled.contains(&s.id)) {
@@ -257,7 +287,7 @@ impl Workspace {
 
     fn sync_one(&self, store: &mut Store, config: &SourceConfig, lock: Option<&Lock>, locked: bool) -> Result<(Option<String>, usize)> {
         self.check_trust(config)?;
-        let source = self.build(config, lock, locked)?;
+        let source = self.build(store, config, lock, locked)?;
         let retrieved_at = now_rfc3339();
         let mut records = Vec::new();
         let mut cursor: Option<String> = None;

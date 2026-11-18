@@ -92,13 +92,30 @@ layer = "repository"
 kind = "ods"
 ```
 
+A markdown wiki (an [llm-wiki](https://github.com/nvk/llm-wiki) topic, an
+Obsidian vault, or `docs/`) can be a source too. Each article becomes a
+`Document` entity about the concepts and models its `[[links]]` and tags name.
+Agents see articles as unreviewed background, kept apart from the team's
+agreed facts. A team fact always comes first, and an article's statement
+becomes a fact only through a proposal a person accepts. Articles are not in
+the digest.
+
+```toml
+[[source]]
+id = "research"
+layer = "local"                          # or repository/central for a team wiki in git
+kind = "wiki"
+path = "~/wiki/topics/subscription-metrics"
+# authority = "declared"                 # for hand-written pages; LLM-compiled ones stay "inferred"
+```
+
 ## Layout
 
 | Path | What |
 |---|---|
 | `crates/onto-core` | Claims, provenance, authority, layers, the `Source` trait, conflict resolution |
 | `crates/onto-store` | SQLite store: generations per source, FTS5 search, bounded traversal, proposals |
-| `crates/onto-workspace` | `onto.toml`, pack format, git/pack/command sources, `onto.lock`, sync, proposal review |
+| `crates/onto-workspace` | `onto.toml`, pack format, git/pack/wiki/command sources, `onto.lock`, sync, proposal review |
 | `crates/onto-ods` | OpenDataSuite as a source: dbt assets, columns, keys and relationships with ODS's evidence |
 | `crates/onto-mcp` | MCP server (`rmcp`, stdio) |
 | `crates/onto-cli` | The `onto` binary |

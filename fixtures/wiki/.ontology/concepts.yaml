@@ -1,0 +1,10 @@
+entities:
+  - id: concept:mrr
+    type: BusinessConcept
+    label: Monthly recurring revenue
+    aliases: [MRR]
+    definition: Sum of active subscriptions' monthly price, after discounts, excluding one-off charges.
+  - id: concept:churn
+    type: BusinessConcept
+    label: Churn
+    definition: A subscription that ends without renewal in the month.

@@ -1,0 +1,18 @@
+# Fixture for the wiki source (#49): a team pack with reviewed facts, and a
+# markdown wiki whose articles are background about them.
+
+[resolution]
+mode = "priority"
+priority = ["repo"]
+
+[[source]]
+id = "repo"
+layer = "repository"
+kind = "pack"
+path = ".ontology"
+
+[[source]]
+id = "notes"
+layer = "repository"
+kind = "wiki"
+path = "team-wiki"

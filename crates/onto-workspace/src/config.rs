@@ -86,6 +86,16 @@ pub enum SourceKind {
         #[serde(default)]
         infer: bool,
     },
+    /// A markdown wiki folder (an llm-wiki topic, an Obsidian vault or
+    /// `docs/`), relative to the workspace root. Its articles are background:
+    /// see [`crate::wiki`].
+    Wiki {
+        path: String,
+        /// `inferred` for LLM-compiled articles (the default), `declared` for
+        /// hand-written ones.
+        #[serde(default = "default_wiki_authority")]
+        authority: Authority,
+    },
     /// Any provider: a command that prints JSON-lines records on stdout.
     Command {
         command: Vec<String>,
@@ -100,6 +110,7 @@ impl SourceKind {
             SourceKind::Pack { .. } => "pack",
             SourceKind::Git { .. } => "git",
             SourceKind::Ods { .. } => "ods",
+            SourceKind::Wiki { .. } => "wiki",
             SourceKind::Command { .. } => "command",
         }
     }
@@ -115,6 +126,10 @@ fn default_path() -> String {
 
 fn default_ods_command() -> Vec<String> {
     vec!["ods".into()]
+}
+
+fn default_wiki_authority() -> Authority {
+    Authority::Inferred
 }
 
 fn default_command_authority() -> Authority {
@@ -157,6 +172,12 @@ mod tests {
             layer = "repository"
             kind = "command"
             command = ["python", "export.py"]
+
+            [[source]]
+            id = "research"
+            layer = "local"
+            kind = "wiki"
+            path = "~/wiki/topics/metrics"
             "#,
         )
         .unwrap();
@@ -164,5 +185,6 @@ mod tests {
         assert!(matches!(&config.sources[0].kind, SourceKind::Git { rev, .. } if rev == "main"));
         assert!(matches!(&config.sources[2].kind, SourceKind::Ods { command, infer: false, project_dir, .. } if command == &["ods"] && project_dir == "."));
         assert!(matches!(config.sources[3].kind, SourceKind::Command { authority: Authority::Observed, .. }));
+        assert!(matches!(config.sources[4].kind, SourceKind::Wiki { authority: Authority::Inferred, .. }));
     }
 }
