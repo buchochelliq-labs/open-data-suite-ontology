@@ -55,6 +55,8 @@ pub fn normalize(text: &str) -> String {
 #[derive(Clone, Debug, Default)]
 pub struct LinkIndex {
     keys: BTreeMap<String, Option<String>>,
+    /// Entity ids, matched exactly before any normalized key.
+    ids: BTreeSet<String>,
 }
 
 impl LinkIndex {
@@ -74,6 +76,9 @@ impl LinkIndex {
     }
 
     pub fn get(&self, key: &str) -> Option<&str> {
+        if let Some(id) = self.ids.get(key.trim()) {
+            return Some(id);
+        }
         self.keys.get(&normalize(key)).and_then(|id| id.as_deref())
     }
 
@@ -91,10 +96,12 @@ impl LinkIndex {
                 }
             }
         }
-        // An id names its own entity even when a label elsewhere uses the same words.
+        // An id written exactly names its own entity; written loosely, it is
+        // one more key, and ids that normalize alike match neither.
         for id in store.subjects()? {
             if !id.starts_with("wiki:") && !id.starts_with("onto:") {
-                index.keys.insert(normalize(&id), Some(id));
+                index.insert(&id, &id);
+                index.ids.insert(id);
             }
         }
         Ok(index)
@@ -368,7 +375,8 @@ fn wiki_links(body: &str) -> Vec<String> {
         if fenced {
             continue;
         }
-        let mut rest = line;
+        let line = without_code_spans(line);
+        let mut rest = line.as_str();
         while let Some(start) = rest.find("[[") {
             let after = &rest[start + 2..];
             let Some(end) = after.find("]]") else { break };
@@ -381,6 +389,30 @@ fn wiki_links(body: &str) -> Vec<String> {
         }
     }
     targets
+}
+
+/// `line` with inline code spans (`` `…` ``, ``` ``…`` ```) blanked out, so a
+/// link shown as an example is not read as a link.
+fn without_code_spans(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    let mut rest = line;
+    while let Some(start) = rest.find('`') {
+        out.push_str(&rest[..start]);
+        let ticks = rest[start..].chars().take_while(|c| *c == '`').count();
+        let fence = "`".repeat(ticks);
+        let after = &rest[start + ticks..];
+        match after.find(&fence) {
+            Some(end) => rest = &after[end + ticks..],
+            // An unclosed backtick is literal text.
+            None => {
+                out.push_str(&rest[start..]);
+                return out;
+            }
+        }
+        out.push(' ');
+    }
+    out.push_str(rest);
+    out
 }
 
 fn clip(text: &str, max: usize) -> String {
@@ -491,9 +523,22 @@ mod tests {
     }
 
     #[test]
+    fn exact_ids_win_and_alike_ids_match_neither_loosely() {
+        let mut index = LinkIndex::default();
+        for id in ["concept:net-revenue", "concept:net_revenue"] {
+            index.insert(id, id);
+            index.ids.insert(id.to_string());
+        }
+        assert_eq!(index.get("concept:net-revenue"), Some("concept:net-revenue"));
+        assert_eq!(index.get("concept:net_revenue"), Some("concept:net_revenue"));
+        assert_eq!(index.get("Concept:Net Revenue"), None);
+    }
+
+    #[test]
     fn normalizes_links() {
         assert_eq!(normalize("Monthly_Recurring-Revenue "), "monthly recurring revenue");
         assert_eq!(wiki_links("a [[x#h|y]] b [[ z ]] [[x]]"), vec!["x", "z"]);
+        assert_eq!(wiki_links("Use `[[shown]]` or ``[[also `shown`]]`` to link [[real]]; a lone ` [[kept]]"), vec!["real", "kept"]);
         assert_eq!(first_paragraph("# T\n\n- list\n\nFirst line\nsecond.\n\nNext."), Some("First line second.".into()));
     }
 }
