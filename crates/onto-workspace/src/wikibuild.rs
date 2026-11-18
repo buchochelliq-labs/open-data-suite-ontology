@@ -10,7 +10,7 @@
 //!
 //! The output depends only on the store, so it can be committed and reviewed.
 //! Every page says it is generated (`generated_by` in its front matter):
-//! [`write`] only replaces or removes such pages, and a `wiki` source never
+//! [`write()`] only replaces or removes such pages, and a `wiki` source never
 //! reads them back.
 
 use std::collections::{BTreeMap, BTreeSet};
@@ -469,7 +469,7 @@ fn home(store: &Store, pages: &Pages, views: &BTreeMap<String, (Section, EntityV
     Ok(out)
 }
 
-/// What [`write`] changed, or would change with `check`.
+/// What [`write()`] changed, or would change with `check`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Changes {
     pub written: Vec<String>,
