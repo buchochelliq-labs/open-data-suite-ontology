@@ -34,7 +34,14 @@ fn a_concept_page_separates_agreed_facts_background_and_links() {
     // Articles are the wiki's own pages, not pages here.
     assert!(files.keys().all(|p| !p.contains("wiki-notes")), "{:?}", files.keys());
     assert!(files["concepts/_index.md"].contains("| [Churn](concept-churn.md) | `concept:churn` |"), "{}", files["concepts/_index.md"]);
-    assert!(files["README.md"].contains("- [Concepts](concepts/_index.md): 2"), "{}", files["README.md"]);
+    assert!(files["README.md"].contains("- [Concepts](concepts/_index.md): 3"), "{}", files["README.md"]);
+    // A relationship that has ended is not listed as current on either side.
+    assert!(!mrr.contains("Legacy MRR") && !files["concepts/concept-legacy_mrr.md"].contains("replaced_by"), "{mrr}");
+    // A column has no page of its own, so every side of its disagreement is on the model's page.
+    let model = &files["models/model.demo.subscriptions.md"];
+    assert!(model.contains("**unit** (sources disagree, **unresolved**: the owners must agree):"), "{model}");
+    assert!(model.contains("USD cents _(repo, reviewed · `concepts.yaml#model.demo.subscriptions#amount`)_"), "{model}");
+    assert!(model.contains("USD _(repo, reviewed · `finance.yaml#model.demo.subscriptions#amount`)_"), "{model}");
 }
 
 #[test]

@@ -8,3 +8,14 @@ entities:
     type: BusinessConcept
     label: Churn
     definition: A subscription that ends without renewal in the month.
+  - id: concept:legacy_mrr
+    type: BusinessConcept
+    label: Legacy MRR
+    relations:
+      # Ended: it must not show on the MRR page as a current relationship.
+      - { predicate: replaced_by, target: concept:mrr, valid: { until: "2020-01-01" } }
+  - id: model.demo.subscriptions
+    type: DataAsset
+    label: subscriptions
+  - id: model.demo.subscriptions#amount
+    properties: { unit: USD cents }

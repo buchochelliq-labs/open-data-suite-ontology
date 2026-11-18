@@ -232,7 +232,8 @@ pub fn build(workspace: &Workspace, store: &Store) -> Result<BTreeMap<String, St
             views.insert(id.clone(), (section, view));
         }
     }
-    let mut taken = BTreeSet::new();
+    // Section indexes share the folders with entity pages.
+    let mut taken = BTreeSet::from(["_index".to_string()]);
     let pages = Pages {
         pages: views
             .iter()
@@ -273,6 +274,17 @@ pub fn build(workspace: &Workspace, store: &Store) -> Result<BTreeMap<String, St
     Ok(files)
 }
 
+/// `**name** (status):` and one line per candidate with its citation, the
+/// candidate lines indented by `indent`.
+fn disagreement(pages: &Pages, name: &str, conflict: &onto_core::Conflict, path: &str, indent: &str) -> String {
+    let status = match &conflict.status {
+        ConflictStatus::ResolvedByPriority { selected_source } => format!("settled by source priority in favour of {selected_source}"),
+        ConflictStatus::Unresolved => "**unresolved**: the owners must agree".to_string(),
+    };
+    let candidates: String = conflict.candidates.iter().map(|v| format!("{indent}- {} {}\n", pages.object(&v.object, path), cite(v))).collect();
+    format!("**{name}** (sources disagree, {status}):\n{candidates}")
+}
+
 #[allow(clippy::too_many_arguments)]
 fn entity_page(
     workspace: &Workspace,
@@ -305,12 +317,7 @@ fn entity_page(
     for property in &view.properties {
         let name = predicate(&property.predicate);
         if let Some(conflict) = &property.conflict {
-            let candidates: Vec<String> = conflict.candidates.iter().map(|v| format!("{} {}", pages.object(&v.object, path), cite(v))).collect();
-            let status = match &conflict.status {
-                ConflictStatus::ResolvedByPriority { selected_source } => format!("settled by source priority in favour of {selected_source}"),
-                ConflictStatus::Unresolved => "**unresolved**: the owners must agree".to_string(),
-            };
-            disagreements.push(format!("- **{name}** ({status}):\n{}", candidates.iter().map(|c| format!("  - {c}\n")).collect::<String>()));
+            disagreements.push(format!("- {}", disagreement(pages, name, conflict, path, "  ")));
         }
         for value in &property.pending {
             pending.push(format!("- {name}: {} _(proposed, not a fact)_\n", pages.object(&value.object, path)));
@@ -336,6 +343,17 @@ fn entity_page(
     let mut background = Vec::new();
     for edge in store.edges_of(id)? {
         if edge.object != *id || edge.subject == *id || edge.predicate == vocab::TYPE || edge.predicate == issues::AFFECTS {
+            continue;
+        }
+        // The store keeps relationships that have ended or not begun; one
+        // holds now only if the other entity, resolved now, still asserts it.
+        let holds = resolve(&edge.subject)?.property(&edge.predicate).is_some_and(|p| {
+            p.values
+                .iter()
+                .chain(p.conflict.iter().flat_map(|c| c.candidates.iter()))
+                .any(|v| v.object.entity() == Some(id.as_str()) && v.qualifiers == edge.qualifiers)
+        });
+        if !holds {
             continue;
         }
         let value = Value {
@@ -404,15 +422,14 @@ fn entity_page(
         for column in columns {
             let view = resolve(column)?;
             let name = column.split_once('#').map(|(_, c)| c).unwrap_or(column);
-            let facts: Vec<String> = view
-                .properties
-                .iter()
-                .filter(|p| p.predicate != vocab::TYPE && p.predicate != vocab::LABEL)
-                .flat_map(|p| {
-                    let disputed = p.conflict.as_ref().map(|_| format!("{}: sources disagree", predicate(&p.predicate)));
-                    disputed.into_iter().chain(p.values.iter().map(|v| format!("{}: {} {}", predicate(&p.predicate), pages.object(&v.object, path), cite(v))))
-                })
-                .collect();
+            let mut facts: Vec<String> = Vec::new();
+            for p in view.properties.iter().filter(|p| p.predicate != vocab::TYPE && p.predicate != vocab::LABEL) {
+                match &p.conflict {
+                    // Columns have no page of their own: every side is shown here.
+                    Some(conflict) => facts.push(disagreement(pages, predicate(&p.predicate), conflict, path, "    ").trim_end().to_string()),
+                    None => facts.extend(p.values.iter().map(|v| format!("{}: {} {}", predicate(&p.predicate), pages.object(&v.object, path), cite(v)))),
+                }
+            }
             lines.push(if facts.is_empty() {
                 format!("- `{name}`\n")
             } else {
@@ -537,6 +554,8 @@ mod tests {
         assert_eq!(slug("concept/MRR", &mut taken), "concept-MRR-2");
         assert_eq!(slug("model.saas.fct_mrr", &mut taken), "model.saas.fct_mrr");
         assert_eq!(slug("::", &mut taken), "entity");
+        let mut taken = BTreeSet::from(["_index".to_string()]);
+        assert_eq!(slug("_INDEX", &mut taken), "_INDEX-2");
         assert_eq!(relative("concepts/a.md", "models/b.md"), "../models/b.md");
         assert_eq!(relative("README.md", "models/b.md"), "models/b.md");
         assert_eq!(relative("models/a.md", "models/b.md"), "b.md");
