@@ -13,14 +13,23 @@ use crate::config::SourceKind;
 use crate::workspace::{Result, Workspace};
 
 /// Ids of the sources whose facts are the team's own: every source except
-/// OpenDataSuite, whose facts agents can read through ODS itself.
+/// OpenDataSuite, whose facts agents can read through ODS itself, and wikis,
+/// whose articles are background.
 pub fn team_sources(workspace: &Workspace, store: &Store) -> Result<BTreeSet<String>> {
     Ok(store
         .sources()?
         .into_iter()
-        .filter(|s| !matches!(workspace.source_config(&s.source_id).map(|c| &c.kind), Some(SourceKind::Ods { .. })))
+        .filter(|s| !matches!(workspace.source_config(&s.source_id).map(|c| &c.kind), Some(SourceKind::Ods { .. } | SourceKind::Wiki { .. })))
         .map(|s| s.source_id)
         .collect())
+}
+
+/// Ids of the sources shown to agents by default: the team's, and wiki
+/// background (labelled as such by every article's `background` fact).
+pub fn shown_sources(workspace: &Workspace, store: &Store) -> Result<BTreeSet<String>> {
+    let mut shown = team_sources(workspace, store)?;
+    shown.extend(workspace.wiki_sources());
+    Ok(shown)
 }
 
 /// Whether the workspace reads a dbt project through OpenDataSuite.
@@ -172,6 +181,10 @@ pub fn summary(view: &EntityView) -> Option<String> {
     }
     if let Some(grain) = view.text("grain") {
         parts.push(format!("grain: {}", clip(grain, 80)));
+    }
+    // A wiki article is background, whichever words matched.
+    if view.text(crate::wiki::BACKGROUND).is_some() {
+        parts.push("unreviewed wiki background".to_string());
     }
     // A known issue's state, so a fixed one is not read as open.
     if let Some(status) = view.text(crate::issues::STATUS) {

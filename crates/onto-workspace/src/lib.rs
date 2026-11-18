@@ -11,6 +11,7 @@ pub mod local;
 pub mod lock;
 pub mod pack;
 pub mod proposals;
+pub mod wiki;
 pub mod workspace;
 
 pub use config::{Config, SourceConfig, SourceKind};
