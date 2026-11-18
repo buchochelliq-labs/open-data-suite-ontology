@@ -1,0 +1,8 @@
+entities:
+  - id: concept:invoice
+    relations:
+      - { predicate: primary_owner, target: team:sales }
+  - { id: team:sales, label: Sales }
+  - id: concept:renewal
+    relations:
+      - { predicate: renews, target: concept:contract }

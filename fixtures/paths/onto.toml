@@ -1,0 +1,20 @@
+# Fixture for ontology_path (#14): a cycle, two shortest routes, a long chain,
+# a relationship that has ended and a known issue linking two models.
+
+[resolution]
+mode = "priority"
+priority = ["repo", "central"]
+
+[[source]]
+id = "repo"
+layer = "repository"
+kind = "pack"
+path = ".ontology"
+
+# A second team pack, lower in priority: where it disagrees with repo it
+# loses, and where repo's fact has ended it is the current source.
+[[source]]
+id = "central"
+layer = "central"
+kind = "pack"
+path = "central"

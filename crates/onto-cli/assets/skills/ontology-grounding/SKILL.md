@@ -23,7 +23,9 @@ reports as unknown may be agreed here. Check before you answer.
    concept → `measured_by` → measure).
 3. Only then, for one entity's detail, `ontology_entity`; for a word search,
    `ontology_search` (lexical: a miss means "not these words"; try one synonym,
-   then stop searching). `ontology_neighbors` lists one entity's relationships.
+   then stop searching). `ontology_neighbors` lists one entity's relationships;
+   `ontology_path` answers "how is A connected to B?" with the shortest chains
+   of relationships between two ids.
 4. When a search finds nothing or the domain is unfamiliar, call
    `ontology_overview` once: the types, predicates, main concepts (aliases,
    the models that represent them) and standards, to find the right id or word.

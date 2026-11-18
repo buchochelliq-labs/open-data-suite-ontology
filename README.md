@@ -62,9 +62,12 @@ Releases follow the buchochelliq-labs standard,
 `python3 .github/rab/scripts/release.py tag` on `main` starts the release.
 
 Agents can read (`ontology_status`, `ontology_overview`, `ontology_search`,
-`ontology_entity`, `ontology_neighbors`, `ontology_context`) and propose
+`ontology_entity`, `ontology_neighbors`, `ontology_path`, `ontology_context`) and propose
 (`ontology_propose`). `ontology_overview` shows what the graph contains (types,
 predicates, main concepts, standards, sources) for when a search finds nothing.
+`ontology_path` answers how two entities are connected: the shortest chains of
+relationships, each step cited, with dbt keys and columns labelled as structure,
+not lineage.
 They cannot sync, accept or write files. Agents only learn from tools they
 think to call, so they also get a digest of the team's agreed facts to read up
 front: `onto init` sets `[context] path = ".onto/context.md"` in `onto.toml`,

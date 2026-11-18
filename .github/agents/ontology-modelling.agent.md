@@ -13,7 +13,7 @@ Follow the `steno` skill: brief working notes, a complete and coherent answer.
 
 Start with `ontology_context` for the models and words in the question (the
 team context digest, when present, replaces `ontology_status`). Use
-`ontology_entity`, `ontology_search` and `ontology_neighbors` only for what it
+`ontology_entity`, `ontology_search`, `ontology_neighbors` and `ontology_path` only for what it
 leaves open, and `ontology_overview` when a search finds nothing or the domain
 is unfamiliar. Cite the source and authority of material facts. Ask targeted questions about missing facts,
 unresolved conflicts and grain mismatches before committing to a design.

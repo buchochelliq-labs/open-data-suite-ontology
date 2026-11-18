@@ -77,6 +77,11 @@ Besides looking up a named model, some tasks only pass if the agent explores:
 | `order-history-unnamed` | The person says "order history"; the model is `order_events` |
 | `naming-standard` | A central standard the question doesn't mention, which the project's own model names don't follow |
 
+`saas-board-metrics-to-accounts` asks how two models relate. The team's facts
+connect them in three steps (report → `measures` → MRR → `measures` → account
+← `represents` ← `dim_accounts`), which `ontology_path` returns in one call.
+The agent must also keep these business relationships apart from dbt lineage.
+
 When a search finds nothing, the skill points the agent to `ontology_overview`
 (types, predicates, main concepts with the models that represent them,
 standards); `order-history-unnamed` and `revenue-definition-paraphrase` measure
