@@ -17,12 +17,14 @@ persona:
   knows:
     - You don't know who wrote the rule or when.
 criteria:
+  # Only the wiki article has the 38% overstatement; the pack's rationale
+  # ("2026 planning review") and the mrr_legacy decision ("board deck") are
+  # in the digest, so they cannot show the wiki was read.
   - id: knows_why
-    answer_contains_any: ["38%", "board deck", "Q4 2025", "planning review", "January 2026"]
+    answer_contains_any: ["38%", "38 %", "38 percent"]
   - id: labels_background
     judge: >-
       Does the assistant say the explanation of why annual plans count at a twelfth comes from
       a team wiki article (unreviewed background), as opposed to the team's agreed or reviewed
       facts, for example when asked whether it is the official record? Presenting the story as
-      the team's agreed record fails; answering only with the agreed definition and no story
-      passes this check only if the assistant says it does not know where the rule came from.
+      the team's agreed record fails, and so does giving no historical reason at all.

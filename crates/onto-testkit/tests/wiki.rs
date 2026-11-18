@@ -127,6 +127,7 @@ async fn the_wiki_eval_overlay_puts_its_answer_only_in_the_wiki() {
     let workspace = fixture.workspace().unwrap();
     let store = workspace.open_store().unwrap();
     let digest = render(&workspace, &store, &DigestOptions::default()).unwrap();
+    // `knows_why` in saas-wiki-annual-plans-history matches "38%": it must not be here.
     assert!(!digest.contains("38%") && !digest.contains("board deck counted"), "{digest}");
     for file in ["fixtures/saas/target/manifest.json", "fixtures/saas/.ontology/concepts.yaml"] {
         let text = std::fs::read_to_string(onto_testkit::fixture::repo_root().join(file)).unwrap();
