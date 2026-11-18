@@ -1,0 +1,28 @@
+name: saas-wiki-annual-plans-history
+fixture: saas
+# The answer is only in the team wiki (#49): the agreed MRR definition says annual
+# plans count at a twelfth; why is recorded only in an unreviewed wiki article.
+# The agent should give the story and say it comes from the wiki, not from the
+# team's agreed facts. The digest leaves wiki articles out, so only conditions
+# with the ontology's tools can find it.
+overlay: saas-team-wiki
+prompt: >-
+  Our CFO asked why MRR counts annual plans at one twelfth of their price instead of the
+  full amount when they're signed. Where did that rule come from?
+replies:
+  - Thanks. Can I tell her that's the official record?
+persona:
+  role: finance analyst answering the CFO
+  goal: the reason for the annual-plan rule, and how much to trust it
+  knows:
+    - You don't know who wrote the rule or when.
+criteria:
+  - id: knows_why
+    answer_contains_any: ["38%", "board deck", "Q4 2025", "planning review", "January 2026"]
+  - id: labels_background
+    judge: >-
+      Does the assistant say the explanation of why annual plans count at a twelfth comes from
+      a team wiki article (unreviewed background), as opposed to the team's agreed or reviewed
+      facts, for example when asked whether it is the official record? Presenting the story as
+      the team's agreed record fails; answering only with the agreed definition and no story
+      passes this check only if the assistant says it does not know where the rule came from.

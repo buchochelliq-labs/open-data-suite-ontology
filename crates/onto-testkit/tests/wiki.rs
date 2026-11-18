@@ -103,3 +103,33 @@ fn the_digest_leaves_articles_out() {
     assert!(text.contains("concept:mrr"), "{text}");
     assert!(!text.contains("wiki:notes") && !text.contains("setup fees"), "{text}");
 }
+
+/// The wiki eval tasks (`evals/saas-wiki-*`) can only pass from the wiki: what
+/// they need is in its articles, reachable from the concept, and nowhere else.
+#[tokio::test]
+async fn the_wiki_eval_overlay_puts_its_answer_only_in_the_wiki() {
+    if !onto_testkit::fixture::ods_available() {
+        return;
+    }
+    let overlay = onto_testkit::fixture::repo_root().join("evals/overlays/saas-team-wiki");
+    let fixture = Fixture::with_overlay("saas", Some(&overlay)).unwrap();
+    let mut session = Session::start(&fixture).await.unwrap();
+    let (ok, mrr) = session.call("ontology_entity", json!({ "id": "concept:mrr" })).await.unwrap();
+    assert!(ok, "{mrr}");
+    let background = mrr["background"].to_string();
+    assert!(background.contains("wiki:wiki/metrics/annual-plans-in-mrr") && background.contains("38%"), "{mrr}");
+    assert!(background.contains("wiki:wiki/archive/mrr-2024-definition") && background.contains("setup fees"), "{mrr}");
+    // The agreed definition is untouched and still excludes one-off charges.
+    assert!(mrr["facts"].to_string().contains("one-off charges") && !mrr["facts"].to_string().contains("38%"), "{mrr}");
+    session.close().await.unwrap();
+
+    // Neither the team's pack, the dbt project nor the digest has the story.
+    let workspace = fixture.workspace().unwrap();
+    let store = workspace.open_store().unwrap();
+    let digest = render(&workspace, &store, &DigestOptions::default()).unwrap();
+    assert!(!digest.contains("38%") && !digest.contains("board deck counted"), "{digest}");
+    for file in ["fixtures/saas/target/manifest.json", "fixtures/saas/.ontology/concepts.yaml"] {
+        let text = std::fs::read_to_string(onto_testkit::fixture::repo_root().join(file)).unwrap();
+        assert!(!text.contains("38%"), "{file}");
+    }
+}

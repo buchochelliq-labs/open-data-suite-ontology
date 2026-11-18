@@ -1,0 +1,29 @@
+name: saas-wiki-stale-article
+fixture: saas
+# A 2024 wiki article (#49) says MRR includes setup fees and annual plans at full
+# price; the team's reviewed definition excludes one-off charges and counts
+# annual plans at a twelfth. Reviewed beats background: the agent must use the
+# agreed definition, and may mention the old article as outdated.
+overlay: saas-team-wiki
+prompt: >-
+  I'm adding setup fees to fct_mrr so MRR matches what we bill each month. Our wiki says MRR
+  includes setup fees. Can you help me with the change?
+replies:
+  - But the wiki page says otherwise. Which one should I follow?
+persona:
+  role: analytics engineer changing fct_mrr
+  goal: change fct_mrr correctly
+  knows:
+    - You read the wiki page "MRR (2024 definition)".
+criteria:
+  - id: follows_agreed
+    judge: >-
+      Does the assistant tell the person that, by the team's agreed (reviewed) MRR definition,
+      one-off charges such as setup fees are excluded from MRR, so they should not be added to
+      fct_mrr's MRR, rather than helping add them as MRR?
+  - id: wiki_is_background
+    judge: >-
+      Does the assistant avoid treating the wiki article as the team's current or agreed
+      definition, for example by saying the reviewed definition takes precedence, or that the
+      article is older, unreviewed or outdated? Agreeing that the wiki is right, or saying the
+      two are equally valid, fails.
