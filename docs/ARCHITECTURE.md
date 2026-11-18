@@ -131,6 +131,12 @@ trait Source { fn info(&self) -> SourceInfo; fn fetch(&self, cursor: Option<&str
 | `wiki` | A markdown wiki: an llm-wiki topic (its compiled `wiki/` articles, not `raw/`), an Obsidian vault or `docs/`. Each article is a `Document` whose claims are about the article itself, so it cannot conflict with or override a team fact. Links and tags that name an entity become `about`, links to other articles `links_to`. Claims carry the source's authority (`inferred` by default). Synced after the other sources, so links match what they hold. Not in the digest. |
 | `command` | Any provider: a command printing JSON-lines records. It cannot choose its own `source_id` or layer. |
 
+`onto wiki build <dir>` renders the store the other way: Markdown pages per
+entity (agreed, observed, inferred, disagreements, known issues, relationships,
+wiki background), each fact citing source, authority and locator. Pages carry
+`generated_by: "onto wiki build"`; the writer only replaces its own pages and
+`wiki` sources skip them, so the output cannot be read back as evidence.
+
 Sync fetches all pages and then replaces the source's generation atomically. A
 failing source keeps its previous generation and is reported (stale-on-error).
 A hosted central service would be one more `Source` implementation with cursor

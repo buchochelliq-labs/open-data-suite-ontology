@@ -109,6 +109,18 @@ path = "~/wiki/topics/subscription-metrics"
 # authority = "declared"                 # for hand-written pages; LLM-compiled ones stay "inferred"
 ```
 
+The other way round, `onto wiki build docs/ontology` writes the ontology as a
+browsable wiki: one page per concept, model, standard and known issue. Each
+page groups facts into agreed, observed and inferred, then lists unresolved
+conflicts, open known issues, relationships and wiki background. Every fact
+cites its source, authority and file. The pages use plain relative links, so
+the folder opens as an Obsidian vault and renders on GitHub. The output
+depends only on the synced store, so you can commit it and review it in a PR,
+and `onto wiki build docs/ontology --check` fails in CI when the folder is out
+of date. Every page is marked as generated: a later build replaces or removes
+only its own pages, and a `wiki` source never reads them back. To change a
+fact, edit the source it cites.
+
 ## Layout
 
 | Path | What |

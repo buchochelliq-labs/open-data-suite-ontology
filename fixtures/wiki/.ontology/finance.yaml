@@ -1,0 +1,4 @@
+# Finance records the same column in dollars: an unresolved disagreement.
+entities:
+  - id: model.demo.subscriptions#amount
+    properties: { unit: USD }

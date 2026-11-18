@@ -87,8 +87,26 @@ enum Command {
         /// Source id from onto.toml.
         source: String,
     },
+    /// Write the ontology as a browsable wiki (Obsidian, GitHub).
+    Wiki {
+        #[command(subcommand)]
+        action: WikiAction,
+    },
     /// Serve the MCP server over stdio.
     Mcp,
+}
+
+#[derive(Subcommand)]
+enum WikiAction {
+    /// Write one page per concept, model, standard and known issue into a folder.
+    /// Only pages it generated are replaced or removed.
+    Build {
+        /// Folder to write, e.g. `docs/ontology`.
+        dir: PathBuf,
+        /// Write nothing; fail if the folder is out of date (for CI).
+        #[arg(long)]
+        check: bool,
+    },
 }
 
 #[derive(Subcommand)]
@@ -299,6 +317,30 @@ async fn run(cli: Cli) -> Result<ExitCode> {
                 println!("Rejected {digest}.");
             }
         },
+        Command::Wiki { action: WikiAction::Build { dir, check } } => {
+            let files = onto_workspace::wikibuild::build(&workspace, &store)?;
+            let changes = onto_workspace::wikibuild::write(&dir, &files, check)?;
+            let verb = if check { "would write" } else { "wrote" };
+            for path in &changes.written {
+                println!("{verb:<12} {path}");
+            }
+            let verb = if check { "would remove" } else { "removed" };
+            for path in &changes.removed {
+                println!("{verb:<12} {path}");
+            }
+            println!(
+                "{} pages in {}: {} changed, {} removed, {} unchanged",
+                files.len(),
+                dir.display(),
+                changes.written.len(),
+                changes.removed.len(),
+                changes.unchanged
+            );
+            if check && !changes.is_empty() {
+                eprintln!("{} is out of date: run `onto wiki build {}`", dir.display(), dir.display());
+                return Ok(ExitCode::FAILURE);
+            }
+        }
         Command::Init { .. } | Command::Mcp => unreachable!("handled above"),
     }
     Ok(ExitCode::SUCCESS)
