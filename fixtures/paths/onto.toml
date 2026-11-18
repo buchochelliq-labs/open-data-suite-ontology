@@ -1,0 +1,12 @@
+# Fixture for ontology_path (#14): a cycle, two shortest routes, a long chain,
+# a relationship that has ended and a known issue linking two models.
+
+[resolution]
+mode = "priority"
+priority = ["repo"]
+
+[[source]]
+id = "repo"
+layer = "repository"
+kind = "pack"
+path = ".ontology"

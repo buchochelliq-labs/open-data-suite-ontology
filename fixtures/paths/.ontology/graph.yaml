@@ -1,0 +1,55 @@
+entities:
+  # A cycle: order → customer → account → order.
+  - id: concept:order
+    type: BusinessConcept
+    label: Order
+    relations:
+      - { predicate: placed_by, target: concept:customer, qualifiers: { cardinality: many_to_one } }
+      # Ended: a shortcut that no longer holds must not be a step.
+      - { predicate: billed_to, target: concept:invoice, valid: { until: "2020-01-01" } }
+  - id: concept:customer
+    type: BusinessConcept
+    label: Customer
+    relations:
+      - { predicate: belongs_to, target: concept:account }
+  - id: concept:account
+    type: BusinessConcept
+    label: Account
+    relations:
+      - { predicate: has_order, target: concept:order }
+      - { predicate: has_contract, target: concept:contract }
+  # Two routes of the same length from customer to invoice.
+  - id: concept:contract
+    type: BusinessConcept
+    label: Contract
+    relations:
+      - { predicate: invoiced_as, target: concept:invoice }
+  - id: concept:subscription
+    type: BusinessConcept
+    label: Subscription
+    relations:
+      - { predicate: held_by, target: concept:account }
+      - { predicate: invoiced_as, target: concept:invoice }
+  - id: concept:invoice
+    type: BusinessConcept
+    label: Invoice
+  # A chain: invoice → c1 → … → c6, longer than the default hop limit from order.
+  - { id: concept:c1, relations: [{ predicate: next, target: concept:c2 }] }
+  - { id: concept:c2, relations: [{ predicate: next, target: concept:c3 }] }
+  - { id: concept:c3, relations: [{ predicate: next, target: concept:c4 }] }
+  - { id: concept:c4, relations: [{ predicate: next, target: concept:c5 }] }
+  - { id: concept:c5, relations: [{ predicate: next, target: concept:c6 }] }
+  - { id: concept:c6, label: C6 }
+  - id: concept:invoice
+    relations:
+      - { predicate: next, target: concept:c1 }
+  # Unconnected, except through a known issue that affects both.
+  - id: concept:island
+    type: BusinessConcept
+    label: Island
+  - id: issue:X-1
+    type: KnownIssue
+    label: Shared defect
+    relations:
+      - { predicate: affects, target: concept:island }
+      - { predicate: affects, target: concept:order }

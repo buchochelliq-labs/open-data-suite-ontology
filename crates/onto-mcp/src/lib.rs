@@ -21,7 +21,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 mod overview;
+mod path;
 pub use overview::{Health, OverviewRequest, OverviewResponse};
+pub use path::{Path, PathRequest, PathResponse};
 
 pub const INSTRUCTIONS: &str = "\
 The team's agreed facts about its data: definitions, grain, ownership, relationships and decisions, \
@@ -640,6 +642,17 @@ impl OntologyServer {
         let depth = req.depth.unwrap_or(1).clamp(1, MAX_DEPTH) as usize;
         let max_edges = req.max_edges.unwrap_or(50).clamp(1, MAX_EDGES) as usize;
         self.with_store(|_, store| Ok(Json(store.neighbors(&req.id, depth, max_edges).map_err(err)?)))
+    }
+
+    #[tool(
+        description = "How two entities are connected: the shortest paths (up to max_hops, default 4) between two concept ids or dbt node ids, each step a relationship with its source and authority. Steps from OpenDataSuite are dbt structure (columns, keys), not lineage.",
+        annotations(read_only_hint = true, open_world_hint = false)
+    )]
+    pub async fn ontology_path(&self, Parameters(req): Parameters<PathRequest>) -> Result<Json<PathResponse>, String> {
+        self.with_store(|ws, store| {
+            let resolve = |id: &str| Self::resolve(ws, store, id, None);
+            path::find(ws, store, &req, &resolve, NOTICE).map(Json)
+        })
     }
 
     #[tool(

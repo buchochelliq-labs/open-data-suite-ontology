@@ -1,0 +1,30 @@
+name: saas-board-metrics-to-accounts
+fixture: saas
+# How do two models relate (#14)? The team's facts connect them in three
+# steps: rpt_board_metrics measures MRR, MRR is measured per account, and
+# dim_accounts represents an account. ontology_path finds that chain in one
+# call; without it the agent has to walk relationships one entity at a time.
+# dbt lineage is a different question (what is built from what), so the
+# answer must not present the team's relationships as lineage.
+prompt: >-
+  How does rpt_board_metrics relate to dim_accounts? I want to know whether the board's MRR
+  figure is built up account by account.
+replies:
+  - Is that the same as saying one is built from the other in dbt?
+persona:
+  role: finance analyst checking the board pack
+  goal: understand how the board's MRR relates to accounts
+  knows:
+    - You don't know the dbt project's structure.
+criteria:
+  - id: explains_chain
+    judge: >-
+      Does the assistant explain, from the team's recorded relationships, that rpt_board_metrics
+      measures MRR and that MRR is measured per account (the entity dim_accounts represents), so
+      the board's MRR is an amount summed over accounts?
+  - id: not_lineage
+    judge: >-
+      When asked whether this means one model is built from the other in dbt, does the assistant
+      keep the team's business relationships apart from dbt lineage, either by checking lineage
+      separately or by saying the recorded relationships do not show how the models are built?
+      Presenting the business relationships as proof of dbt lineage fails.
