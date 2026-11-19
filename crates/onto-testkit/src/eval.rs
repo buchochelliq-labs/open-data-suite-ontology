@@ -292,22 +292,34 @@ pub struct RunResult {
     pub split: Option<String>,
     pub condition: Condition,
     pub run: usize,
+    // Fields added over time default when an older results.json lacks them,
+    // so `onto-eval --report` and `--compare` still read it.
     /// Set when the run could not happen (e.g. `ods` missing).
+    #[serde(default)]
     pub skipped: Option<String>,
     /// Set when the model could not be reached or failed mid-episode; the
     /// run's scores then say nothing about the ontology.
+    #[serde(default)]
     pub error: Option<String>,
     /// No further requests can succeed (daily quota or the run's budget);
     /// the runner stops after this run.
+    #[serde(default)]
     pub budget_exhausted: bool,
+    #[serde(default)]
     pub criteria: Vec<CriterionResult>,
+    #[serde(default)]
     pub tool_calls: usize,
+    #[serde(default)]
     pub failed_tool_calls: usize,
     /// How the agent explored, from its tool calls.
+    #[serde(default)]
     pub exploration: Exploration,
     /// Tokens used, by role.
+    #[serde(default)]
     pub tokens: RunTokens,
+    #[serde(default)]
     pub violations: Vec<String>,
+    #[serde(default)]
     pub warnings: Vec<String>,
     #[serde(skip)]
     pub transcript: Transcript,

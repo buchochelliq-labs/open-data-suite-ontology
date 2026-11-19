@@ -495,3 +495,38 @@ fn every_task_split_is_known() {
         assert!(task.split.as_deref().is_none_or(|s| s == "test"), "{}: split must be `test` or unset", task.name);
     }
 }
+
+#[test]
+fn reliability_counts_only_complete_runs_and_a_common_k() {
+    use onto_testkit::eval::{CriterionResult, RunResult};
+    use onto_testkit::stats::{scores, summarize};
+    let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
+    let run = |task: &str, n: usize, outcomes: &[Outcome]| {
+        let task = tasks.iter().find(|t| t.name == task).unwrap();
+        let mut r = RunResult::not_run(task, Condition::BOTH, n, "");
+        r.skipped = None;
+        r.criteria = outcomes.iter().enumerate().map(|(i, o)| CriterionResult { id: format!("c{i}"), outcome: *o, detail: String::new() }).collect();
+        r
+    };
+    // An unanswered judgement keeps the share of what was scored, but the run did not pass everything.
+    let partial = summarize(&scores(&[run("orders-fact-grain", 1, &[Outcome::Pass, Outcome::Error])], |_| true), Condition::BOTH).unwrap();
+    assert_eq!((partial.score.mean, partial.pass_at_1, partial.pass_all), (1.0, 0.0, 0.0));
+
+    // One task has three runs (the third failed), another only one: pass^k uses k = 1 for both.
+    let results = [
+        run("orders-fact-grain", 1, &[Outcome::Pass]),
+        run("orders-fact-grain", 2, &[Outcome::Pass]),
+        run("orders-fact-grain", 3, &[Outcome::Fail]),
+        run("naming-standard", 1, &[Outcome::Pass]),
+    ];
+    let s = summarize(&scores(&results, |_| true), Condition::BOTH).unwrap();
+    assert_eq!((s.k, s.pass_all), (1, 1.0));
+}
+
+#[test]
+fn results_from_before_token_counts_still_load() {
+    // A results.json written before `tokens`, `exploration` and friends existed.
+    let old = r#"[{"task": "orders-fact-grain", "condition": "both", "run": 1, "criteria": [{"id": "grain", "outcome": "pass", "detail": ""}]}]"#;
+    let results: Vec<onto_testkit::eval::RunResult> = serde_json::from_str(old).unwrap();
+    assert!(report(&results).contains("| both | 1 | 100% [100%, 100%]"));
+}

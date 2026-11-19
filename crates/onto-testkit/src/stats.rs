@@ -83,17 +83,32 @@ pub struct RunScore {
 
 /// Scores of the runs in `results` that `keep` selects.
 pub fn scores(results: &[RunResult], keep: impl Fn(&RunResult) -> bool) -> Scores {
-    let mut out: Scores = BTreeMap::new();
+    let mut out: BTreeMap<String, BTreeMap<Condition, Vec<(usize, RunScore)>>> = BTreeMap::new();
     for r in results.iter().filter(|r| r.skipped.is_none() && r.error.is_none() && keep(r)) {
         let scored: Vec<&Outcome> = r.criteria.iter().map(|c| &c.outcome).filter(|o| matches!(o, Outcome::Pass | Outcome::Fail)).collect();
         if scored.is_empty() {
             continue;
         }
         let passed = scored.iter().filter(|o| ***o == Outcome::Pass).count();
-        let score = RunScore { share: passed as f64 / scored.len() as f64, all_passed: passed == scored.len() };
-        out.entry(r.task.clone()).or_default().entry(r.condition).or_default().push(score);
+        // A criterion nobody assessed (a judge error, or --no-judge) leaves the
+        // share as it is, but the run did not pass *every* criterion.
+        let complete = scored.len() == r.criteria.len();
+        let score = RunScore { share: passed as f64 / scored.len() as f64, all_passed: complete && passed == scored.len() };
+        out.entry(r.task.clone()).or_default().entry(r.condition).or_default().push((r.run, score));
     }
-    out
+    // In run order, so "the first k runs" means the same thing for every task.
+    out.into_iter()
+        .map(|(task, by)| {
+            let by = by
+                .into_iter()
+                .map(|(c, mut runs)| {
+                    runs.sort_by_key(|(n, _)| *n);
+                    (c, runs.into_iter().map(|(_, s)| s).collect())
+                })
+                .collect();
+            (task, by)
+        })
+        .collect()
 }
 
 fn task_mean(runs: &[RunScore]) -> f64 {
@@ -107,8 +122,9 @@ pub struct ConditionSummary {
     pub score: Estimate,
     /// Share of runs that passed every criterion.
     pub pass_at_1: f64,
-    /// Share of tasks every run of which passed every criterion, and the
-    /// fewest runs any task had (the k in pass^k).
+    /// pass^k: share of tasks whose first k runs all passed every criterion,
+    /// with k the fewest usable runs any task had, so every task is held to
+    /// the same number of repeats.
     pub pass_all: f64,
     pub k: usize,
 }
@@ -117,12 +133,13 @@ pub fn summarize(scores: &Scores, condition: Condition) -> Option<ConditionSumma
     let runs: Vec<&Vec<RunScore>> = scores.values().filter_map(|by| by.get(&condition)).collect();
     let score = bootstrap(&runs.iter().map(|r| task_mean(r)).collect::<Vec<_>>())?;
     let all_runs: Vec<&RunScore> = runs.iter().flat_map(|r| r.iter()).collect();
+    let k = runs.iter().map(|r| r.len()).min().unwrap_or(0);
     Some(ConditionSummary {
         tasks: runs.len(),
         score,
         pass_at_1: all_runs.iter().filter(|s| s.all_passed).count() as f64 / all_runs.len() as f64,
-        pass_all: runs.iter().filter(|r| r.iter().all(|s| s.all_passed)).count() as f64 / runs.len() as f64,
-        k: runs.iter().map(|r| r.len()).min().unwrap_or(0),
+        pass_all: runs.iter().filter(|r| r.iter().take(k).all(|s| s.all_passed)).count() as f64 / runs.len() as f64,
+        k,
     })
 }
 
