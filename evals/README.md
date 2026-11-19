@@ -51,6 +51,7 @@ persona:                        # for runs where a model plays the person
   accepts_proposals: false      # whether they accept a proposal they agree with
 conditions: [ontology_only]     # optional tool sets; default all three
 overlay: saas-data412-fixed     # optional: evals/overlays/<name>/ copied over the fixture (a variant)
+split: test                     # optional: a held-out task, reported separately
 followup:                       # optional: a later session on the same workspace
   prompt: A teammate's question.
   replies: [...]
@@ -108,6 +109,36 @@ A `followup` runs a second conversation on the same workspace after the
 first: accepted proposals carry over, the agent and the conversation start
 fresh, and its criteria are reported as `followup.<id>`. In `ods_only` nothing
 can be recorded, so the later session cannot know the fact.
+
+### Statistics
+
+Every report has a **Statistics** section (#56), because at this size
+comparing overall pass rates misleads:
+
+- **Score.** A run's score is the share of its criteria that passed, and a
+  task's score is the mean over its runs. A condition's score is the mean over
+  tasks, with a 95% bootstrap interval that resamples tasks and keeps each
+  task's runs together.
+- **Reliability.** `pass@1` is the share of runs that passed every criterion.
+  `pass^k` is the share of tasks where every run did.
+- **Paired differences.** For each pair of conditions, the report gives the
+  mean difference on the tasks both answered, with its interval and the
+  smallest difference the task set could detect (80% power, 5% level). An
+  interval that includes 0, or a difference smaller than the detectable one,
+  is not a finding.
+- **Held-out tasks.** Tasks marked `split: test` are reported on their own.
+  Write new tasks as `split: test`, and don't look at their transcripts while
+  tuning the skill or the digest.
+- **Comparing runs.** `onto-eval --compare first/results.json
+  second/results.json` compares two runs of the same tasks per condition, for
+  example with a wiki and with `--overlay none`. `onto-eval --report
+  results.json` re-renders an old run's report with the current statistics.
+
+Errored runs and unanswered judgements are not scores and are left out. The
+bootstrap's seed is fixed, so the same results always give the same report.
+
+**Ablation.** `--overlay saas-authority-inferred` marks every team fact on the
+pilot as `inferred`. If scores don't move, agents aren't using authority.
 
 ### Repeats and spread
 

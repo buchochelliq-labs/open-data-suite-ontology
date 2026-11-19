@@ -1,0 +1,6 @@
+# Ablation (#56): every fact in the team's pack, which normally counts as
+# reviewed, is marked `inferred` (a guess). Run tasks with
+# `--overlay saas-authority-inferred` against the bare fixture: if scores do not
+# move, agents are not using authority labels at all.
+name = "acme"
+authority = "inferred"

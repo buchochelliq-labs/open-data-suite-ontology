@@ -448,3 +448,85 @@ fn repeated_runs_report_their_spread() {
     let errors = report(&[run(1, &[Outcome::Pass, Outcome::Pass]), outage, run(3, &[Outcome::Pass, Outcome::Error])]);
     assert!(errors.contains("| both | 2 | 100% | 100% | 100% |"), "{errors}");
 }
+
+#[test]
+fn the_report_compares_conditions_on_paired_tasks_and_separates_held_out_ones() {
+    use onto_testkit::eval::{CriterionResult, RunResult};
+    let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
+    let run = |task: &str, condition: Condition, n: usize, pass: bool, split: Option<&str>| {
+        let task = tasks.iter().find(|t| t.name == task).unwrap();
+        let mut r = RunResult::not_run(task, condition, n, "");
+        r.skipped = None;
+        r.split = split.map(str::to_string);
+        let outcome = if pass { Outcome::Pass } else { Outcome::Fail };
+        r.criteria = vec![CriterionResult { id: "c".into(), outcome, detail: String::new() }];
+        r
+    };
+    let mut results = Vec::new();
+    for task in ["orders-fact-grain", "naming-standard", "churn-not-recorded"] {
+        for n in 1..=3 {
+            results.push(run(task, Condition::BOTH, n, true, None));
+            // ods_only passes one task in three runs out of three, another in one run.
+            let ods = task == "orders-fact-grain" || (task == "naming-standard" && n == 1);
+            results.push(run(task, Condition::ODS_ONLY, n, ods, None));
+        }
+    }
+    let text = report(&results);
+    assert!(text.contains("## Statistics"), "{text}");
+    assert!(text.contains("| both | 3 | 100% [100%, 100%] | 100% | 100% (k=3) |"), "{text}");
+    assert!(text.contains("| ods_only | 3 | 44% ["), "{text}");
+    // both − ods_only: +56 points on paired tasks, with an interval.
+    assert!(text.contains("| both − ods_only | 3 | +56 ["), "{text}");
+
+    // Held-out tasks are reported on their own.
+    results.push(run("payments-key-stale", Condition::BOTH, 1, true, Some("test")));
+    let text = report(&results);
+    assert!(text.contains("## Statistics: tuning tasks") && text.contains("## Statistics: held-out tasks (split: test)"), "{text}");
+
+    // Two runs of the same tasks compared per condition.
+    let worse: Vec<RunResult> = results.iter().filter(|r| r.split.is_none()).map(|r| run(&r.task, r.condition, r.run, false, None)).collect();
+    let compared = onto_testkit::stats::compare(&results, &worse, ("with", "without"));
+    assert!(compared.contains("| both | 3 | 100% | 0% | +100 [+100, +100] | – |"), "{compared}");
+}
+
+#[test]
+fn every_task_split_is_known() {
+    for task in Task::load_dir(&repo_root().join("evals")).unwrap() {
+        assert!(task.split.as_deref().is_none_or(|s| s == "test"), "{}: split must be `test` or unset", task.name);
+    }
+}
+
+#[test]
+fn reliability_counts_only_complete_runs_and_a_common_k() {
+    use onto_testkit::eval::{CriterionResult, RunResult};
+    use onto_testkit::stats::{scores, summarize};
+    let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
+    let run = |task: &str, n: usize, outcomes: &[Outcome]| {
+        let task = tasks.iter().find(|t| t.name == task).unwrap();
+        let mut r = RunResult::not_run(task, Condition::BOTH, n, "");
+        r.skipped = None;
+        r.criteria = outcomes.iter().enumerate().map(|(i, o)| CriterionResult { id: format!("c{i}"), outcome: *o, detail: String::new() }).collect();
+        r
+    };
+    // An unanswered judgement keeps the share of what was scored, but the run did not pass everything.
+    let partial = summarize(&scores(&[run("orders-fact-grain", 1, &[Outcome::Pass, Outcome::Error])], |_| true), Condition::BOTH).unwrap();
+    assert_eq!((partial.score.mean, partial.pass_at_1, partial.pass_all), (1.0, 0.0, 0.0));
+
+    // One task has three runs (the third failed), another only one: pass^k uses k = 1 for both.
+    let results = [
+        run("orders-fact-grain", 1, &[Outcome::Pass]),
+        run("orders-fact-grain", 2, &[Outcome::Pass]),
+        run("orders-fact-grain", 3, &[Outcome::Fail]),
+        run("naming-standard", 1, &[Outcome::Pass]),
+    ];
+    let s = summarize(&scores(&results, |_| true), Condition::BOTH).unwrap();
+    assert_eq!((s.k, s.pass_all), (1, 1.0));
+}
+
+#[test]
+fn results_from_before_token_counts_still_load() {
+    // A results.json written before `tokens`, `exploration` and friends existed.
+    let old = r#"[{"task": "orders-fact-grain", "condition": "both", "run": 1, "criteria": [{"id": "grain", "outcome": "pass", "detail": ""}]}]"#;
+    let results: Vec<onto_testkit::eval::RunResult> = serde_json::from_str(old).unwrap();
+    assert!(report(&results).contains("| both | 1 | 100% [100%, 100%]"));
+}

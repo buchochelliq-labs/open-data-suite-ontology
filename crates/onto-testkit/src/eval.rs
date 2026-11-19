@@ -202,6 +202,10 @@ pub struct Task {
     /// fixture's: a variant of the fixture, such as a known issue that is fixed.
     #[serde(default)]
     pub overlay: Option<String>,
+    /// `test` for a held-out task: never looked at while tuning the skill or
+    /// the digest, and reported separately. Unset: a tuning task.
+    #[serde(default)]
+    pub split: Option<String>,
     /// The person's opening message.
     pub prompt: String,
     /// The person's replies, in order, whenever the agent stops to talk.
@@ -263,7 +267,7 @@ pub enum Check {
     Judge(String),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Outcome {
     Pass,
@@ -273,34 +277,49 @@ pub enum Outcome {
     Error,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CriterionResult {
     pub id: String,
     pub outcome: Outcome,
     pub detail: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RunResult {
     pub task: String,
+    /// The task's split (`test` for held-out tasks).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub split: Option<String>,
     pub condition: Condition,
     pub run: usize,
+    // Fields added over time default when an older results.json lacks them,
+    // so `onto-eval --report` and `--compare` still read it.
     /// Set when the run could not happen (e.g. `ods` missing).
+    #[serde(default)]
     pub skipped: Option<String>,
     /// Set when the model could not be reached or failed mid-episode; the
     /// run's scores then say nothing about the ontology.
+    #[serde(default)]
     pub error: Option<String>,
     /// No further requests can succeed (daily quota or the run's budget);
     /// the runner stops after this run.
+    #[serde(default)]
     pub budget_exhausted: bool,
+    #[serde(default)]
     pub criteria: Vec<CriterionResult>,
+    #[serde(default)]
     pub tool_calls: usize,
+    #[serde(default)]
     pub failed_tool_calls: usize,
     /// How the agent explored, from its tool calls.
+    #[serde(default)]
     pub exploration: Exploration,
     /// Tokens used, by role.
+    #[serde(default)]
     pub tokens: RunTokens,
+    #[serde(default)]
     pub violations: Vec<String>,
+    #[serde(default)]
     pub warnings: Vec<String>,
     #[serde(skip)]
     pub transcript: Transcript,
@@ -540,6 +559,7 @@ impl RunResult {
     pub fn not_run(task: &Task, condition: Condition, run: usize, reason: impl Into<String>) -> Self {
         RunResult {
             task: task.name.clone(),
+            split: task.split.clone(),
             condition,
             run,
             skipped: Some(reason.into()),
@@ -738,7 +758,8 @@ async fn converse(
 }
 
 /// Tokens one run used, by role, as the models reported them.
-#[derive(Clone, Copy, Debug, Default, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct RunTokens {
     pub agent: TokenUsage,
     pub person: TokenUsage,
@@ -746,7 +767,8 @@ pub struct RunTokens {
 }
 
 /// How an agent explored in one run, measured from its tool calls.
-#[derive(Clone, Debug, Default, Serialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Exploration {
     /// Distinct entities and models the agent looked up by id or name.
     pub entities: usize,
@@ -854,6 +876,14 @@ pub fn report(results: &[RunResult]) -> String {
             let max = rates.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
             out.push_str(&format!("| {} | {} | {mean:.0}% | {min:.0}% | {max:.0}% |\n", condition.name(), rates.len()));
         }
+    }
+    // Paired comparisons and reliability (#56); held-out tasks on their own.
+    let held_out = |r: &RunResult| r.split.as_deref() == Some("test");
+    if results.iter().any(held_out) {
+        out.extend(crate::stats::section(results, "Statistics: tuning tasks", |r| !held_out(r)));
+        out.extend(crate::stats::section(results, "Statistics: held-out tasks (split: test)", held_out));
+    } else {
+        out.extend(crate::stats::section(results, "Statistics", |_| true));
     }
     let skipped: Vec<String> = results.iter().filter_map(|r| r.skipped.as_ref().map(|s| format!("{} / {}: {s}", r.task, r.condition.name()))).collect();
     out.push_str(

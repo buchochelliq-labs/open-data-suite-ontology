@@ -22,6 +22,8 @@ pub mod human;
 pub mod invariants;
 pub mod scenario;
 pub mod session;
+#[cfg(feature = "llm")]
+pub mod stats;
 pub mod transcript;
 
 pub use fixture::Fixture;

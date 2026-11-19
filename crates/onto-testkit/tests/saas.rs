@@ -140,3 +140,19 @@ async fn a_fixed_known_issue_is_history_not_a_warning() {
     assert!(issue["facts"].to_string().contains("status: fixed"), "{issue}");
     session.close().await.unwrap();
 }
+
+/// The authority ablation (#56): the same pilot with every team fact marked a
+/// guess, to test whether agents use authority labels at all.
+#[tokio::test]
+async fn the_authority_ablation_marks_every_team_fact_inferred() {
+    if !onto_testkit::fixture::ods_available() {
+        return;
+    }
+    let overlay = onto_testkit::fixture::repo_root().join("evals/overlays/saas-authority-inferred");
+    let fixture = onto_testkit::Fixture::with_overlay("saas", Some(&overlay)).unwrap();
+    let mut session = onto_testkit::Session::start(&fixture).await.unwrap();
+    let (_, mrr) = session.call("ontology_entity", serde_json::json!({ "id": "concept:mrr" })).await.unwrap();
+    let facts = mrr["facts"].to_string();
+    assert!(facts.contains("[repo inferred]") && !facts.contains("repo reviewed"), "{mrr}");
+    session.close().await.unwrap();
+}
