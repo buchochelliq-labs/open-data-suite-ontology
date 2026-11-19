@@ -121,7 +121,10 @@ pub struct WikiSource {
 
 /// An article as read from disk.
 struct Article {
+    /// Path without the extension: the article's id and link name.
     rel: String,
+    /// Path as on disk, for citations.
+    file: String,
     front: serde_norway::Mapping,
     body: String,
 }
@@ -160,7 +163,8 @@ impl WikiSource {
                 // A page `onto wiki build` wrote: reading it back would cite onto as its own source.
                 continue;
             }
-            articles.push(Article { rel: rel.trim_end_matches(".md").to_string(), front, body: body.to_string() });
+            let stem = rel.strip_suffix(".mdx").or_else(|| rel.strip_suffix(".md")).unwrap_or(&rel).to_string();
+            articles.push(Article { rel: stem, file: rel, front, body: body.to_string() });
         }
 
         // Links between articles, by file name (Obsidian) or title.
@@ -196,13 +200,15 @@ impl WikiSource {
 
     fn expand(&self, article: &Article, internal: &LinkIndex, out: &mut Vec<Record>) {
         let id = document_id(&self.id, &article.rel);
-        let locator = format!("{}.md", article.rel);
+        let locator = article.file.clone();
         let mut push = |claim: Claim| out.push(self.record(claim, &locator));
 
         push(Claim::relation(&id, vocab::TYPE, DOCUMENT));
         let title = text_field(&article.front, "title").unwrap_or_else(|| article.rel.rsplit('/').next().unwrap_or(&article.rel).to_string());
         push(Claim::literal(&id, vocab::LABEL, title));
-        if let Some(definition) = text_field(&article.front, "summary").or_else(|| first_paragraph(&article.body)) {
+        // llm-wiki writes `summary`; Docusaurus and many static-site generators `description`.
+        let summary = text_field(&article.front, "summary").or_else(|| text_field(&article.front, "description"));
+        if let Some(definition) = summary.or_else(|| first_paragraph(&article.body)) {
             push(Claim::literal(&id, vocab::DEFINITION, clip(&definition, MAX_DEFINITION)));
         }
         push(Claim::literal(&id, BACKGROUND, BACKGROUND_NOTE));
@@ -278,7 +284,7 @@ fn collect_markdown(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
         }
         if path.is_dir() {
             collect_markdown(&path, out)?;
-        } else if name.ends_with(".md") && !name.starts_with('_') {
+        } else if (name.ends_with(".md") || name.ends_with(".mdx")) && !name.starts_with('_') {
             out.push(path);
         }
     }
@@ -532,6 +538,21 @@ mod tests {
         assert_eq!(index.get("concept:net-revenue"), Some("concept:net-revenue"));
         assert_eq!(index.get("concept:net_revenue"), Some("concept:net_revenue"));
         assert_eq!(index.get("Concept:Net Revenue"), None);
+    }
+
+    #[test]
+    fn reads_docusaurus_pages() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(
+            dir.path().join("claims-lag.mdx"),
+            "---\nid: claims-lag\ntitle: \"Claims Lag Issues\"\ndescription: The lag between incurred and paid dates.\n---\n<div>\n  <small>Updated</small>\n</div>\n\n## Dates\n\nText.\n",
+        )
+        .unwrap();
+        let (records, _) = source(dir.path(), LinkIndex::default()).load().unwrap();
+        let doc = "wiki:research/claims-lag";
+        assert_eq!(find(&records, doc, vocab::LABEL)[0].claim.object.as_text(), Some("Claims Lag Issues"));
+        assert_eq!(find(&records, doc, vocab::DEFINITION)[0].claim.object.as_text(), Some("The lag between incurred and paid dates."));
+        assert_eq!(find(&records, doc, vocab::LABEL)[0].provenance.locator.as_deref(), Some("claims-lag.mdx"));
     }
 
     #[test]

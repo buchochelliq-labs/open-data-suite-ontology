@@ -157,6 +157,16 @@ To measure what the wiki adds, run the same tasks without it:
 the bare fixture, a control for the wiki's effect. `--overlay <name>` runs them
 all on another overlay.
 
+### A real wiki: the Tuva Project's docs
+
+`--overlay tuva-docs-wiki` adds the Tuva Project's own documentation as a
+`wiki` source on the Tuva fixture: about 240 Docusaurus pages (knowledge base,
+data marts, terminology, an archive), written for people, not for onto, with
+almost no `[[links]]`. It is fetched at a pinned commit by
+`evals/overlays/tuva-docs-wiki/fetch.sh` (Apache-2.0; the workflow runs it).
+Running the `tuva` tasks with it and without it shows whether a real wiki helps,
+distracts or crowds out the team's facts.
+
 ### A real project: Tuva
 
 `fixtures/tuva` is the open-source Tuva healthcare data model with a made-up

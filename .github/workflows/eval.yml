@@ -95,6 +95,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install opendatasuite==0.0.2
+      # Overlays whose wiki is fetched, not committed (e.g. tuva-docs-wiki):
+      # they copy markdown at a pinned commit and run nothing they fetch.
+      - name: Fetch overlay sources
+        run: for script in evals/overlays/*/fetch.sh; do bash "$script"; done
 
       - name: Install Claude Code and build onto
         if: inputs.provider == 'claude-code'
