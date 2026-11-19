@@ -342,6 +342,8 @@ criteria:
     let grounded = result.criteria.iter().find(|c| c.id == "grounded").unwrap();
     assert_eq!(grounded.outcome, Outcome::Pass, "{grounded:?}");
     assert_eq!(judge_requests.lock().unwrap().len(), 2, "asked once more after the malformed reply");
+    // The second request says what was wrong, so the same slip is less likely.
+    assert!(judge_requests.lock().unwrap()[1].to_string().contains("could not be parsed"), "the retry names the problem");
 }
 
 #[tokio::test]

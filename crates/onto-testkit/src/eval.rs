@@ -440,7 +440,7 @@ type Verdicts = BTreeMap<String, Verdict>;
 /// malformed reply (an unescaped quote in a reason, say) is a formatting slip,
 /// not a verdict, so asking again is cheaper than losing the conversation's
 /// scores.
-const JUDGE_ATTEMPTS: usize = 2;
+const JUDGE_ATTEMPTS: usize = 3;
 
 /// Every judged question about one conversation in a single request.
 async fn judge(judge: &Judge, questions: &[(&str, &str)], transcript: &Transcript) -> Result<(Verdicts, TokenUsage)> {
@@ -448,14 +448,21 @@ async fn judge(judge: &Judge, questions: &[(&str, &str)], transcript: &Transcrip
     let prompt = format!("Questions:\n{}\n\nConversation:\n{}", listed.join("\n"), render(transcript));
     let mut usage = TokenUsage::default();
     let mut attempt = 0;
+    let mut request = prompt.clone();
     loop {
         attempt += 1;
-        let (text, used) = ask(judge, JUDGE_SYSTEM, &prompt).await?;
+        let (text, used) = ask(judge, JUDGE_SYSTEM, &request).await?;
         usage += used;
         match parse_verdicts(&text, questions) {
             Ok(verdicts) => return Ok((verdicts, usage)),
             Err(e) if attempt >= JUDGE_ATTEMPTS => return Err(e.context(format!("after {attempt} attempts"))),
-            Err(_) => continue,
+            // The same question again tends to get the same slip: say what was wrong.
+            Err(e) => {
+                request = format!(
+                    "{prompt}\n\nYour previous reply could not be parsed ({e:#}). Reply with one JSON object only, \
+                     with every double quote inside a reason escaped as \\\" or replaced by a single quote."
+                )
+            }
         }
     }
 }
