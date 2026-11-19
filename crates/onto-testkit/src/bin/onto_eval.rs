@@ -137,7 +137,21 @@ async fn calibrate(dir: &Option<PathBuf>, live: bool, record: bool) -> Result<()
             let transcript = Transcript::from_jsonl(&std::fs::read_to_string(set.conversation_path(conversation))?)?;
             verdicts.extend(judge_conversation(&judge, conversation, &questions, &transcript).await?);
         }
+        // A judge that skipped a question, or contradicted itself, leaves an
+        // item without a verdict: never replace a complete recording with that.
+        let missing: Vec<String> = set
+            .items
+            .iter()
+            .filter(|i| !verdicts.iter().any(|v| v.conversation == i.conversation && v.criterion == i.criterion))
+            .map(|i| format!("{} / {}", i.conversation, i.criterion))
+            .collect();
+        if !missing.is_empty() {
+            eprintln!("no usable verdict on {} item(s): {}", missing.len(), missing.join(", "));
+        }
         if record {
+            if !missing.is_empty() {
+                bail!("not recorded: {} item(s) have no usable verdict; recorded.json is unchanged", missing.len());
+            }
             set.save_recorded(&verdicts)?;
         }
         (verdicts, "asked the judge model again")
