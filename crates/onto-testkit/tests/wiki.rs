@@ -151,3 +151,29 @@ async fn the_wiki_eval_overlay_puts_its_answer_only_in_the_wiki() {
         }
     }
 }
+
+/// A real wiki has many articles that match a word better than the team's own
+/// entity does (the Tuva docs pushed `concept:pmpm` out of every starting slot).
+/// The team's entities start the context; an article joins, after them.
+#[tokio::test]
+async fn articles_do_not_crowd_the_teams_entities_out_of_context() {
+    let overlay = tempfile::tempdir().unwrap();
+    let dir = overlay.path().join("team-wiki/churn");
+    std::fs::create_dir_all(&dir).unwrap();
+    for n in 1..=4 {
+        std::fs::write(
+            dir.join(format!("churn-{n}.md")),
+            format!("---\ntitle: Churn analysis {n}\nsummary: Churn, churn rates and churn cohorts, part {n}.\n---\n\nChurn churn churn.\n"),
+        )
+        .unwrap();
+    }
+    let fixture = Fixture::with_overlay("wiki", Some(overlay.path())).unwrap();
+    let mut session = Session::start(&fixture).await.unwrap();
+    let (ok, context) = session.call("ontology_context", json!({ "terms": ["churn"] })).await.unwrap();
+    assert!(ok, "{context}");
+    let ids: Vec<&str> = context["entities"].as_array().unwrap().iter().filter_map(|e| e["id"].as_str()).collect();
+    assert_eq!(ids.first(), Some(&"concept:churn"), "the team's concept comes first: {ids:?}");
+    let seeded_articles = ids.iter().filter(|id| id.starts_with("wiki:notes/churn/")).count();
+    assert_eq!(seeded_articles, 1, "one article starts the context: {ids:?}");
+    session.close().await.unwrap();
+}
