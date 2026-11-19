@@ -56,6 +56,9 @@ on:
         type: choice
         options: [scripted, simulated]
         default: scripted
+      overlay:
+        description: Run every task on this overlay (evals/overlays/<name>) instead of its own, or `none` for the bare fixture (a control). Empty = each task's own
+        required: false
       person_window:
         description: What a simulated person rereads each reply. A number = its opening message plus that many latest messages; full = the whole conversation (costs more)
         default: "4"
@@ -146,9 +149,11 @@ jobs:
           MAX_REQUESTS: ${{ inputs.max_requests }}
           HUMAN: ${{ inputs.human }}
           PERSON_WINDOW: ${{ inputs.person_window }}
+          OVERLAY: ${{ inputs.overlay }}
         run: |
           ARGS=(--runs "$RUNS" --conditions "$CONDITIONS" --human "$HUMAN" --person-window "${PERSON_WINDOW:-4}")
           if [ -n "$TASK" ]; then ARGS+=(--task "$TASK"); fi
+          if [ -n "$OVERLAY" ]; then ARGS+=(--overlay "$OVERLAY"); fi
           if [ "$JUDGE" != "true" ]; then ARGS+=(--no-judge); fi
           mkdir -p target/eval
           set -o pipefail

@@ -123,14 +123,31 @@ async fn the_wiki_eval_overlay_puts_its_answer_only_in_the_wiki() {
     assert!(mrr["facts"].to_string().contains("one-off charges") && !mrr["facts"].to_string().contains("38%"), "{mrr}");
     session.close().await.unwrap();
 
+    // The partial-source tasks: the articles reach the concepts they complete.
+    let mut session = Session::start(&fixture).await.unwrap();
+    for (id, article) in [("concept:active_user", "wiki:wiki/product/event-tracking-history"), ("concept:arr", "wiki:wiki/decisions/arr-definitions-meeting")] {
+        let (_, entity) = session.call("ontology_entity", json!({ "id": id })).await.unwrap();
+        assert!(entity["background"].to_string().contains(article), "{entity}");
+    }
+    // The ARR conflict stays unresolved: the article's remark about decks settles nothing.
+    let (_, arr) = session.call("ontology_entity", json!({ "id": "concept:arr" })).await.unwrap();
+    assert!(arr["unresolved_conflicts"].to_string().contains("definition"), "{arr}");
+    session.close().await.unwrap();
+
     // Neither the team's pack, the dbt project nor the digest has the story.
     let workspace = fixture.workspace().unwrap();
     let store = workspace.open_store().unwrap();
     let digest = render(&workspace, &store, &DigestOptions::default()).unwrap();
     // `knows_why` in saas-wiki-annual-plans-history matches "38%": it must not be here.
     assert!(!digest.contains("38%") && !digest.contains("board deck counted"), "{digest}");
+    // Nor what the partial-source tasks check for (`warns_backfill_limit`, `knows_process`).
+    for detail in ["March 2025", "2025-03", "tracking v2", "Q1 2027", "VP Sales"] {
+        assert!(!digest.contains(detail), "{detail} is in the digest");
+    }
     for file in ["fixtures/saas/target/manifest.json", "fixtures/saas/.ontology/concepts.yaml"] {
         let text = std::fs::read_to_string(onto_testkit::fixture::repo_root().join(file)).unwrap();
-        assert!(!text.contains("38%"), "{file}");
+        for detail in ["38%", "March 2025", "2025-03-01", "tracking v2", "Q1 2027", "VP Sales"] {
+            assert!(!text.contains(detail), "{detail} in {file}");
+        }
     }
 }
