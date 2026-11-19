@@ -138,7 +138,8 @@ pub struct EpisodeStats {
 }
 
 /// Tokens a model reported using, summed over requests.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
 pub struct TokenUsage {
     /// Requests counted.
     pub requests: u64,

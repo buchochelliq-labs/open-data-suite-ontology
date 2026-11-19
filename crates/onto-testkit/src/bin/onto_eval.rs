@@ -60,6 +60,14 @@ struct Args {
     /// with and without, say, a wiki source, to measure what it adds.
     #[arg(long)]
     overlay: Option<String>,
+    /// Re-render the report of an earlier run from its results.json, with no
+    /// model calls: to apply a newer report (e.g. its statistics) to old runs.
+    #[arg(long)]
+    report: Option<PathBuf>,
+    /// Compare two earlier runs of the same tasks (results.json each, e.g. with
+    /// and without a wiki): per condition, the paired difference first − second.
+    #[arg(long, num_args = 2, value_names = ["FIRST", "SECOND"])]
+    compare: Option<Vec<PathBuf>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -82,6 +90,18 @@ fn role_config(agent: &ModelConfig, role: &str) -> ModelConfig {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    if let Some(paths) = &args.compare {
+        let load = |p: &PathBuf| -> Result<Vec<RunResult>> { Ok(serde_json::from_str(&std::fs::read_to_string(p)?)?) };
+        let name = |p: &PathBuf| p.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.display().to_string());
+        let (first, second) = (&paths[0], &paths[1]);
+        print!("{}", onto_testkit::stats::compare(&load(first)?, &load(second)?, (&name(first), &name(second))));
+        return Ok(());
+    }
+    if let Some(path) = &args.report {
+        let results: Vec<RunResult> = serde_json::from_str(&std::fs::read_to_string(path)?)?;
+        print!("{}", report(&results));
+        return Ok(());
+    }
     let mut budget = None;
     let simulated = args.human == HumanMode::Simulated;
     let (agent, judge, person) = if std::env::var("ONTO_AGENT").is_ok_and(|a| a == "claude-code") {

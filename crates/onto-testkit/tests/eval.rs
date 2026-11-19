@@ -448,3 +448,50 @@ fn repeated_runs_report_their_spread() {
     let errors = report(&[run(1, &[Outcome::Pass, Outcome::Pass]), outage, run(3, &[Outcome::Pass, Outcome::Error])]);
     assert!(errors.contains("| both | 2 | 100% | 100% | 100% |"), "{errors}");
 }
+
+#[test]
+fn the_report_compares_conditions_on_paired_tasks_and_separates_held_out_ones() {
+    use onto_testkit::eval::{CriterionResult, RunResult};
+    let tasks = Task::load_dir(&repo_root().join("evals")).unwrap();
+    let run = |task: &str, condition: Condition, n: usize, pass: bool, split: Option<&str>| {
+        let task = tasks.iter().find(|t| t.name == task).unwrap();
+        let mut r = RunResult::not_run(task, condition, n, "");
+        r.skipped = None;
+        r.split = split.map(str::to_string);
+        let outcome = if pass { Outcome::Pass } else { Outcome::Fail };
+        r.criteria = vec![CriterionResult { id: "c".into(), outcome, detail: String::new() }];
+        r
+    };
+    let mut results = Vec::new();
+    for task in ["orders-fact-grain", "naming-standard", "churn-not-recorded"] {
+        for n in 1..=3 {
+            results.push(run(task, Condition::BOTH, n, true, None));
+            // ods_only passes one task in three runs out of three, another in one run.
+            let ods = task == "orders-fact-grain" || (task == "naming-standard" && n == 1);
+            results.push(run(task, Condition::ODS_ONLY, n, ods, None));
+        }
+    }
+    let text = report(&results);
+    assert!(text.contains("## Statistics"), "{text}");
+    assert!(text.contains("| both | 3 | 100% [100%, 100%] | 100% | 100% (k=3) |"), "{text}");
+    assert!(text.contains("| ods_only | 3 | 44% ["), "{text}");
+    // both − ods_only: +56 points on paired tasks, with an interval.
+    assert!(text.contains("| both − ods_only | 3 | +56 ["), "{text}");
+
+    // Held-out tasks are reported on their own.
+    results.push(run("payments-key-stale", Condition::BOTH, 1, true, Some("test")));
+    let text = report(&results);
+    assert!(text.contains("## Statistics: tuning tasks") && text.contains("## Statistics: held-out tasks (split: test)"), "{text}");
+
+    // Two runs of the same tasks compared per condition.
+    let worse: Vec<RunResult> = results.iter().filter(|r| r.split.is_none()).map(|r| run(&r.task, r.condition, r.run, false, None)).collect();
+    let compared = onto_testkit::stats::compare(&results, &worse, ("with", "without"));
+    assert!(compared.contains("| both | 3 | 100% | 0% | +100 [+100, +100] | – |"), "{compared}");
+}
+
+#[test]
+fn every_task_split_is_known() {
+    for task in Task::load_dir(&repo_root().join("evals")).unwrap() {
+        assert!(task.split.as_deref().is_none_or(|s| s == "test"), "{}: split must be `test` or unset", task.name);
+    }
+}
