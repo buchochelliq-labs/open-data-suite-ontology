@@ -287,6 +287,33 @@ criteria:
 }
 
 #[tokio::test]
+async fn a_note_after_the_judges_json_is_ignored() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("note.yaml"),
+        r#"
+name: note
+fixture: shop
+conditions: [ontology_only]
+prompt: What is a customer?
+criteria:
+  - { id: grounded, judge: "Is the answer grounded?" }
+"#,
+    )
+    .unwrap();
+    let tasks = Task::load_dir(dir.path()).unwrap();
+    let (agent_url, _) = serve(vec![say("An account holder.")]).await;
+    // A Tuva run's judge added a second object after its verdicts.
+    let (judge_url, judge_requests) = serve(vec![say("{\"grounded\": {\"pass\": true, \"reason\": \"Cites it.\"}}\n\n{\"note\": \"checked twice\"}")]).await;
+    let (agent, judge) = (Agent::Api(config(agent_url)), Agent::Api(config(judge_url)));
+    let cast = Cast { judge: Some(&judge), ..Cast::new(&agent) };
+    let result = run_task(&tasks[0], Condition::ONTOLOGY_ONLY, 1, cast).await.unwrap();
+    let grounded = result.criteria.iter().find(|c| c.id == "grounded").unwrap();
+    assert_eq!(grounded.outcome, Outcome::Pass, "{grounded:?}");
+    assert_eq!(judge_requests.lock().unwrap().len(), 1, "no second request");
+}
+
+#[tokio::test]
 async fn a_judge_reply_that_is_not_json_is_asked_again() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(

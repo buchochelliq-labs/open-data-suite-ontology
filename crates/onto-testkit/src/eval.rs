@@ -463,8 +463,13 @@ async fn judge(judge: &Judge, questions: &[(&str, &str)], transcript: &Transcrip
 /// The verdicts in a judge's reply: a JSON object by question id.
 fn parse_verdicts(text: &str, questions: &[(&str, &str)]) -> Result<Verdicts> {
     let start = text.find('{').context("judge reply has no JSON")?;
-    let end = text.rfind('}').context("judge reply has no JSON")?;
-    let reply: Value = serde_json::from_str(&text[start..=end]).context("judge reply is not JSON")?;
+    // The first JSON value; a judge sometimes adds a note (or a second object)
+    // after it, and the verdicts are in the first.
+    let reply: Value = serde_json::Deserializer::from_str(&text[start..])
+        .into_iter::<Value>()
+        .next()
+        .context("judge reply has no JSON")?
+        .context("judge reply is not JSON")?;
     let verdict = |v: &Value| Verdict { pass: v["pass"].as_bool().unwrap_or(false), reason: v["reason"].as_str().unwrap_or_default().to_string() };
     let mut verdicts = Verdicts::new();
     for (id, _) in questions {
