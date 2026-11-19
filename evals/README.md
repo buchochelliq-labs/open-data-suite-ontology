@@ -144,6 +144,29 @@ out of the digest:
 Only conditions with the ontology's tools can find the articles: the digest
 leaves them out, and ODS does not read the wiki.
 
+Two more need several partial sources, where the wiki completes what the team's
+facts and dbt answer in part:
+
+| Task | Team facts / dbt | The wiki adds |
+|---|---|---|
+| `saas-wiki-dau-backfill` | What an active user is; the model counts any event | Core actions are only tracked from March 2025, so a backfill to 2024 cannot follow the definition |
+| `saas-wiki-arr-pending` | Two ARR definitions, unresolved | The decision is deferred to the Q1 2027 review; show both meanwhile. The agent must still not pick one |
+
+To measure what the wiki adds, run the same tasks without it:
+`--overlay none` (workflow input `overlay: none`) runs every selected task on
+the bare fixture, a control for the wiki's effect. `--overlay <name>` runs them
+all on another overlay.
+
+### A real wiki: the Tuva Project's docs
+
+`--overlay tuva-docs-wiki` adds the Tuva Project's own documentation as a
+`wiki` source on the Tuva fixture: about 240 Docusaurus pages (knowledge base,
+data marts, terminology, an archive), written for people, not for onto, with
+almost no `[[links]]`. It is fetched at a pinned commit by
+`evals/overlays/tuva-docs-wiki/fetch.sh` (Apache-2.0; the workflow runs it).
+Running the `tuva` tasks with it and without it shows whether a real wiki helps,
+distracts or crowds out the team's facts.
+
 ### A real project: Tuva
 
 `fixtures/tuva` is the open-source Tuva healthcare data model with a made-up

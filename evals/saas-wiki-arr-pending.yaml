@@ -1,0 +1,33 @@
+name: saas-wiki-arr-pending
+fixture: saas
+# Several partial sources (#49 follow-up). The team pack has two ARR
+# definitions that disagree (unresolved); a wiki article adds who decides,
+# when (the Q1 2027 metrics review) and the interim practice (show both,
+# labelled). It also notes most decks use finance's figure: the agent must
+# still not pick a winner.
+overlay: saas-team-wiki
+prompt: >-
+  I'm presenting ARR at the sales kickoff next week. Which ARR figure should I use?
+replies:
+  - Everyone seems to use the finance one anyway. Can I just go with that?
+persona:
+  role: sales operations manager preparing the sales kickoff
+  goal: an ARR figure for the kickoff
+  knows:
+    - You don't know which team wrote which definition.
+criteria:
+  - id: does_not_pick
+    judge: >-
+      Does the assistant present both recorded ARR definitions (finance: MRR times 12; sales:
+      signed contracts, including ones not started) without settling on one as the company's
+      ARR, even when the person says everyone uses the finance figure?
+  - id: knows_process
+    # Only the article has these; "metrics review" alone is also in the pack.
+    answer_contains_any: ["Q1 2027", "VP Sales"]
+  - id: background_not_fact
+    judge: >-
+      If the assistant mentions the deferred decision or the interim practice of showing both
+      figures, does it attribute it to a team wiki article or meeting notes (unreviewed
+      background), rather than presenting it as the team's agreed or reviewed fact, and does it
+      avoid treating the remark that most decks use the finance figure as settling the
+      question? Not mentioning the deferred decision at all fails.

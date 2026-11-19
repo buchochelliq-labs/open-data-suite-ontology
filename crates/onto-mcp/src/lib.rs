@@ -498,16 +498,24 @@ impl OntologyServer {
                     not_found.push(id.clone());
                 }
             }
+            // Wiki articles match words well (they are prose), so on a real wiki
+            // they would take every starting slot and push out the team's own
+            // entities. Each term starts from up to three models or concepts,
+            // plus at most one article, placed after the team's entities.
+            let mut background_seeds = Vec::new();
             for term in &req.terms {
                 let hits: Vec<String> = store.search(term, 20).map_err(err)?.into_iter().map(|h| h.id).filter(|id| !hidden_issues.contains(id)).collect();
+                let (articles, entities): (Vec<String>, Vec<String>) = hits.into_iter().partition(|id| id.starts_with("wiki:"));
                 // Prefer models and concepts; columns only when nothing else matches.
-                let best: Vec<String> = hits.iter().filter(|id| !id.contains('#')).take(3).cloned().collect();
-                let best = if best.is_empty() { hits.into_iter().take(3).collect() } else { best };
-                if best.is_empty() {
+                let best: Vec<String> = entities.iter().filter(|id| !id.contains('#')).take(3).cloned().collect();
+                let best = if best.is_empty() { entities.into_iter().take(3).collect() } else { best };
+                if best.is_empty() && articles.is_empty() {
                     not_found.push(term.clone());
                 }
                 seeds.extend(best);
+                background_seeds.extend(articles.into_iter().take(1));
             }
+            seeds.extend(background_seeds);
             let mut order: Vec<String> = Vec::new();
             for seed in seeds {
                 if !order.contains(&seed) {

@@ -440,7 +440,7 @@ type Verdicts = BTreeMap<String, Verdict>;
 /// malformed reply (an unescaped quote in a reason, say) is a formatting slip,
 /// not a verdict, so asking again is cheaper than losing the conversation's
 /// scores.
-const JUDGE_ATTEMPTS: usize = 2;
+const JUDGE_ATTEMPTS: usize = 3;
 
 /// Every judged question about one conversation in a single request.
 async fn judge(judge: &Judge, questions: &[(&str, &str)], transcript: &Transcript) -> Result<(Verdicts, TokenUsage)> {
@@ -448,14 +448,21 @@ async fn judge(judge: &Judge, questions: &[(&str, &str)], transcript: &Transcrip
     let prompt = format!("Questions:\n{}\n\nConversation:\n{}", listed.join("\n"), render(transcript));
     let mut usage = TokenUsage::default();
     let mut attempt = 0;
+    let mut request = prompt.clone();
     loop {
         attempt += 1;
-        let (text, used) = ask(judge, JUDGE_SYSTEM, &prompt).await?;
+        let (text, used) = ask(judge, JUDGE_SYSTEM, &request).await?;
         usage += used;
         match parse_verdicts(&text, questions) {
             Ok(verdicts) => return Ok((verdicts, usage)),
             Err(e) if attempt >= JUDGE_ATTEMPTS => return Err(e.context(format!("after {attempt} attempts"))),
-            Err(_) => continue,
+            // The same question again tends to get the same slip: say what was wrong.
+            Err(e) => {
+                request = format!(
+                    "{prompt}\n\nYour previous reply could not be parsed ({e:#}). Reply with one JSON object only, \
+                     with every double quote inside a reason escaped as \\\" or replaced by a single quote."
+                )
+            }
         }
     }
 }
@@ -463,8 +470,13 @@ async fn judge(judge: &Judge, questions: &[(&str, &str)], transcript: &Transcrip
 /// The verdicts in a judge's reply: a JSON object by question id.
 fn parse_verdicts(text: &str, questions: &[(&str, &str)]) -> Result<Verdicts> {
     let start = text.find('{').context("judge reply has no JSON")?;
-    let end = text.rfind('}').context("judge reply has no JSON")?;
-    let reply: Value = serde_json::from_str(&text[start..=end]).context("judge reply is not JSON")?;
+    // The first JSON value; a judge sometimes adds a note (or a second object)
+    // after it, and the verdicts are in the first.
+    let reply: Value = serde_json::Deserializer::from_str(&text[start..])
+        .into_iter::<Value>()
+        .next()
+        .context("judge reply has no JSON")?
+        .context("judge reply is not JSON")?;
     let verdict = |v: &Value| Verdict { pass: v["pass"].as_bool().unwrap_or(false), reason: v["reason"].as_str().unwrap_or_default().to_string() };
     let mut verdicts = Verdicts::new();
     for (id, _) in questions {

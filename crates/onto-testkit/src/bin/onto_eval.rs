@@ -55,6 +55,11 @@ struct Args {
     /// Stop after this many model requests in total (agent and judge).
     #[arg(long)]
     max_requests: Option<usize>,
+    /// Run every selected task on this overlay (`evals/overlays/<name>/`)
+    /// instead of its own, or on the bare fixture with `none`: the same tasks
+    /// with and without, say, a wiki source, to measure what it adds.
+    #[arg(long)]
+    overlay: Option<String>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -107,7 +112,16 @@ async fn main() -> Result<()> {
     }
     let cast = Cast { agent: &agent, judge: judge.as_ref(), person: person.as_ref(), person_history: args.person_window };
     let conditions: Vec<Condition> = args.conditions.iter().map(|c| c.parse::<Condition>().map_err(anyhow::Error::msg)).collect::<Result<_>>()?;
-    let tasks = Task::load_dir(&args.evals.unwrap_or_else(|| repo_root().join("evals")))?;
+    let mut tasks = Task::load_dir(&args.evals.unwrap_or_else(|| repo_root().join("evals")))?;
+    if let Some(overlay) = &args.overlay {
+        for task in &mut tasks {
+            task.overlay = (overlay != "none").then(|| overlay.clone());
+            if let Some(dir) = task.overlay_dir().filter(|d| !d.is_dir()) {
+                bail!("unknown overlay {}", dir.display());
+            }
+        }
+        eprintln!("overlay: {overlay} for every task (overrides the tasks' own)");
+    }
     let out = args.out.unwrap_or_else(|| repo_root().join("target/eval"));
     std::fs::create_dir_all(out.join("transcripts"))?;
 
@@ -151,7 +165,10 @@ async fn main() -> Result<()> {
         total.output,
         total.requests
     );
-    let markdown = report(&results);
+    let mut markdown = report(&results);
+    if let Some(overlay) = &args.overlay {
+        markdown = markdown.replacen("\n", &format!("\n\nEvery task ran on overlay `{overlay}` instead of its own.\n"), 1);
+    }
     std::fs::write(out.join("report.md"), &markdown)?;
     std::fs::write(out.join("results.json"), serde_json::to_string_pretty(&results)?)?;
     println!("{markdown}");

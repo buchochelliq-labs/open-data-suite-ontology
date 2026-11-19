@@ -1,0 +1,33 @@
+name: saas-wiki-dau-backfill
+fixture: saas
+# Several partial sources (#49 follow-up). The team's definition of an active
+# user (ontology, digest), dbt's model counting any event (ODS), and one wiki
+# article: core actions are only tracked from 2025-03-01, so a backfill to
+# 2024 cannot follow the definition. Each source answers part; the wiki
+# completes it, as unreviewed background.
+overlay: saas-team-wiki
+prompt: >-
+  I'm fixing fct_daily_active_users to match our DAU definition and backfilling it to January
+  2024 for the investor deck. What do I need to change, and is there anything I should watch
+  out for?
+replies:
+  - Is there anything about the history itself I should know before I backfill?
+persona:
+  role: product analyst preparing the investor update
+  goal: a DAU series from January 2024 that matches the company's definition
+  knows:
+    - You assumed the event data looks the same for the whole period.
+criteria:
+  - id: uses_definition
+    judge: >-
+      Does the assistant say that an active user needs a core action (project_created,
+      report_viewed or query_run), not just any event or a login, and that internal accounts'
+      users are excluded?
+  - id: warns_backfill_limit
+    # Only the article has these.
+    answer_contains_any: ["March 2025", "2025-03", "Mar 2025", "tracking v2"]
+  - id: background_not_fact
+    judge: >-
+      If the assistant mentions that core actions are only tracked from March 2025, does it
+      present this as coming from a team wiki article (unreviewed background, worth confirming)
+      rather than as the team's agreed or reviewed fact? Not mentioning it at all fails.
