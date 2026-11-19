@@ -10,6 +10,7 @@
 
 #[cfg(feature = "llm")]
 pub mod agent;
+pub mod calibration;
 #[cfg(feature = "llm")]
 pub mod claude_code;
 #[cfg(feature = "llm")]

@@ -322,6 +322,14 @@ Writes `target/eval/report.md` (pass counts per task, criterion and
 condition), `results.json`, and one transcript per run that can be replayed as
 a regression test.
 
+## Judge calibration
+
+Judged criteria are only as good as the judge. `evals/judge-calibration/`
+holds conversations from past runs with a person's label on each judged
+criterion; `onto-eval --calibrate` reports Cohen's κ between those labels and
+the judge's recorded verdicts, and a test fails when it drops below 0.70. See
+[its README](judge-calibration/README.md).
+
 ## Spending fewer tokens
 
 The report has a token table per condition: the agent's requests, new and

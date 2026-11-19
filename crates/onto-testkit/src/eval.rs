@@ -510,6 +510,29 @@ fn parse_verdicts(text: &str, questions: &[(&str, &str)]) -> Result<Verdicts> {
     Ok(verdicts)
 }
 
+/// The judge's verdicts on `questions` about one recorded conversation, as
+/// an eval run would score them: a verdict whose reason contradicts its
+/// boolean counts as no verdict. Used to calibrate the judge (#57).
+pub async fn judge_conversation(
+    model: &Judge,
+    conversation: &str,
+    questions: &[(&str, &str)],
+    transcript: &Transcript,
+) -> Result<Vec<crate::calibration::Verdict>> {
+    use crate::calibration::{Label, Verdict as Recorded};
+    let (verdicts, _) = judge(model, questions, transcript).await?;
+    Ok(verdicts
+        .into_iter()
+        .filter(|(_, v)| !v.contradicts_itself())
+        .map(|(id, v)| Recorded {
+            conversation: conversation.to_string(),
+            criterion: id,
+            judge: if v.pass { Label::Pass } else { Label::Fail },
+            reason: v.reason,
+        })
+        .collect())
+}
+
 /// What the judge said about a run: verdicts, or why there are none.
 enum Judged {
     NotConfigured,
