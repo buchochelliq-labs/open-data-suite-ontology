@@ -1,0 +1,402 @@
+- conversation: r11-saas-wiki-annual-plans-history-both-1
+  criterion: labels_background
+  question: Does the assistant say the explanation of why annual plans count at a twelfth comes from a
+    team wiki article (unreviewed background), as opposed to the team's agreed or reviewed facts, for
+    example when asked whether it is the official record? Presenting the story as the team's agreed record
+    fails, and so does giving no historical reason at all.
+  human: null
+- conversation: r11-saas-wiki-annual-plans-history-ods_only+digest-1
+  criterion: labels_background
+  question: Does the assistant say the explanation of why annual plans count at a twelfth comes from a
+    team wiki article (unreviewed background), as opposed to the team's agreed or reviewed facts, for
+    example when asked whether it is the official record? Presenting the story as the team's agreed record
+    fails, and so does giving no historical reason at all.
+  human: null
+- conversation: r11-saas-wiki-annual-plans-history-ods_only-2
+  criterion: labels_background
+  question: Does the assistant say the explanation of why annual plans count at a twelfth comes from a
+    team wiki article (unreviewed background), as opposed to the team's agreed or reviewed facts, for
+    example when asked whether it is the official record? Presenting the story as the team's agreed record
+    fails, and so does giving no historical reason at all.
+  human: null
+- conversation: r12-saas-board-metrics-to-accounts-both-3
+  criterion: explains_chain
+  question: Does the assistant explain, from the team's recorded relationships, that rpt_board_metrics
+    measures MRR and that MRR is measured per account (the entity dim_accounts represents), so the board's
+    MRR is an amount summed over accounts?
+  human: null
+- conversation: r12-saas-board-metrics-to-accounts-both-3
+  criterion: not_lineage
+  question: When asked whether this means one model is built from the other in dbt, does the assistant
+    keep the team's business relationships apart from dbt lineage, either by checking lineage separately
+    or by saying the recorded relationships do not show how the models are built? Presenting the business
+    relationships as proof of dbt lineage fails.
+  human: null
+- conversation: r12-saas-board-metrics-to-accounts-ods_only+digest-1
+  criterion: explains_chain
+  question: Does the assistant explain, from the team's recorded relationships, that rpt_board_metrics
+    measures MRR and that MRR is measured per account (the entity dim_accounts represents), so the board's
+    MRR is an amount summed over accounts?
+  human: null
+- conversation: r12-saas-board-metrics-to-accounts-ods_only+digest-1
+  criterion: not_lineage
+  question: When asked whether this means one model is built from the other in dbt, does the assistant
+    keep the team's business relationships apart from dbt lineage, either by checking lineage separately
+    or by saying the recorded relationships do not show how the models are built? Presenting the business
+    relationships as proof of dbt lineage fails.
+  human: null
+- conversation: r12-saas-board-metrics-to-accounts-ods_only-2
+  criterion: explains_chain
+  question: Does the assistant explain, from the team's recorded relationships, that rpt_board_metrics
+    measures MRR and that MRR is measured per account (the entity dim_accounts represents), so the board's
+    MRR is an amount summed over accounts?
+  human: null
+- conversation: r12-saas-board-metrics-to-accounts-ods_only-2
+  criterion: not_lineage
+  question: When asked whether this means one model is built from the other in dbt, does the assistant
+    keep the team's business relationships apart from dbt lineage, either by checking lineage separately
+    or by saying the recorded relationships do not show how the models are built? Presenting the business
+    relationships as proof of dbt lineage fails.
+  human: null
+- conversation: r12-saas-board-metrics-to-accounts-ontology_only-1
+  criterion: explains_chain
+  question: Does the assistant explain, from the team's recorded relationships, that rpt_board_metrics
+    measures MRR and that MRR is measured per account (the entity dim_accounts represents), so the board's
+    MRR is an amount summed over accounts?
+  human: null
+- conversation: r12-saas-board-metrics-to-accounts-ontology_only-1
+  criterion: not_lineage
+  question: When asked whether this means one model is built from the other in dbt, does the assistant
+    keep the team's business relationships apart from dbt lineage, either by checking lineage separately
+    or by saying the recorded relationships do not show how the models are built? Presenting the business
+    relationships as proof of dbt lineage fails.
+  human: null
+- conversation: r13-tuva-cost-provider-join-both-2
+  criterion: no_join_needed_or_full_key
+  question: Does the assistant either say core__cost already has the payer-attributed provider columns
+    (so no join is needed), or, if it joins, join on the full member-month key (member_month_id, or person_id,
+    member_id, year_month, payer, plan and data_source) rather than on person_id alone or person_id and
+    month only?
+  human: null
+- conversation: r13-tuva-cost-provider-join-both-2
+  criterion: count_people
+  question: Does the assistant count people with person_id (distinct), not member_id, citing the team's
+    standard that a person can have several member ids?
+  human: null
+- conversation: r13-tuva-cost-provider-join-ods_only+digest-2
+  criterion: no_join_needed_or_full_key
+  question: Does the assistant either say core__cost already has the payer-attributed provider columns
+    (so no join is needed), or, if it joins, join on the full member-month key (member_month_id, or person_id,
+    member_id, year_month, payer, plan and data_source) rather than on person_id alone or person_id and
+    month only?
+  human: null
+- conversation: r13-tuva-cost-provider-join-ods_only+digest-2
+  criterion: count_people
+  question: Does the assistant count people with person_id (distinct), not member_id, citing the team's
+    standard that a person can have several member ids?
+  human: null
+- conversation: r13-tuva-cost-provider-join-ods_only-2
+  criterion: no_join_needed_or_full_key
+  question: Does the assistant either say core__cost already has the payer-attributed provider columns
+    (so no join is needed), or, if it joins, join on the full member-month key (member_month_id, or person_id,
+    member_id, year_month, payer, plan and data_source) rather than on person_id alone or person_id and
+    month only?
+  human: null
+- conversation: r13-tuva-cost-provider-join-ods_only-2
+  criterion: count_people
+  question: Does the assistant count people with person_id (distinct), not member_id, citing the team's
+    standard that a person can have several member ids?
+  human: null
+- conversation: r14-saas-wiki-annual-plans-history-ods_only+digest-2
+  criterion: labels_background
+  question: Does the assistant say the explanation of why annual plans count at a twelfth comes from a
+    team wiki article (unreviewed background), as opposed to the team's agreed or reviewed facts, for
+    example when asked whether it is the official record? Presenting the story as the team's agreed record
+    fails, and so does giving no historical reason at all.
+  human: null
+- conversation: r14-saas-wiki-arr-pending-ods_only+digest-2
+  criterion: does_not_pick
+  question: 'Does the assistant present both recorded ARR definitions (finance: MRR times 12; sales: signed
+    contracts, including ones not started) without settling on one as the company''s ARR, even when the
+    person says everyone uses the finance figure?'
+  human: null
+- conversation: r14-saas-wiki-arr-pending-ods_only+digest-2
+  criterion: background_not_fact
+  question: If the assistant mentions the deferred decision or the interim practice of showing both figures,
+    does it attribute it to a team wiki article or meeting notes (unreviewed background), rather than
+    presenting it as the team's agreed or reviewed fact, and does it avoid treating the remark that most
+    decks use the finance figure as settling the question? Not mentioning the deferred decision at all
+    fails.
+  human: null
+- conversation: r14-saas-wiki-dau-backfill-both-2
+  criterion: uses_definition
+  question: Does the assistant say that an active user needs a core action (project_created, report_viewed
+    or query_run), not just any event or a login, and that internal accounts' users are excluded?
+  human: null
+- conversation: r14-saas-wiki-dau-backfill-both-2
+  criterion: background_not_fact
+  question: If the assistant mentions that core actions are only tracked from March 2025, does it present
+    this as coming from a team wiki article (unreviewed background, worth confirming) rather than as the
+    team's agreed or reviewed fact? Not mentioning it at all fails.
+  human: null
+- conversation: r14-saas-wiki-dau-backfill-ods_only-2
+  criterion: uses_definition
+  question: Does the assistant say that an active user needs a core action (project_created, report_viewed
+    or query_run), not just any event or a login, and that internal accounts' users are excluded?
+  human: null
+- conversation: r14-saas-wiki-dau-backfill-ods_only-2
+  criterion: background_not_fact
+  question: If the assistant mentions that core actions are only tracked from March 2025, does it present
+    this as coming from a team wiki article (unreviewed background, worth confirming) rather than as the
+    team's agreed or reviewed fact? Not mentioning it at all fails.
+  human: null
+- conversation: r14-saas-wiki-dau-backfill-ods_only-3
+  criterion: uses_definition
+  question: Does the assistant say that an active user needs a core action (project_created, report_viewed
+    or query_run), not just any event or a login, and that internal accounts' users are excluded?
+  human: null
+- conversation: r14-saas-wiki-dau-backfill-ods_only-3
+  criterion: background_not_fact
+  question: If the assistant mentions that core actions are only tracked from March 2025, does it present
+    this as coming from a team wiki article (unreviewed background, worth confirming) rather than as the
+    team's agreed or reviewed fact? Not mentioning it at all fails.
+  human: null
+- conversation: r14-saas-wiki-stale-article-both-3
+  criterion: follows_agreed
+  question: Does the assistant tell the person that, by the team's agreed (reviewed) MRR definition, one-off
+    charges such as setup fees are excluded from MRR, so they should not be added to fct_mrr's MRR, rather
+    than helping add them as MRR?
+  human: null
+- conversation: r14-saas-wiki-stale-article-both-3
+  criterion: wiki_is_background
+  question: Does the assistant avoid treating the wiki article as the team's current or agreed definition,
+    for example by saying the reviewed definition takes precedence, or that the article is older, unreviewed
+    or outdated? Agreeing that the wiki is right, or saying the two are equally valid, fails.
+  human: null
+- conversation: r14-saas-wiki-stale-article-ontology_only-1
+  criterion: follows_agreed
+  question: Does the assistant tell the person that, by the team's agreed (reviewed) MRR definition, one-off
+    charges such as setup fees are excluded from MRR, so they should not be added to fct_mrr's MRR, rather
+    than helping add them as MRR?
+  human: null
+- conversation: r14-saas-wiki-stale-article-ontology_only-1
+  criterion: wiki_is_background
+  question: Does the assistant avoid treating the wiki article as the team's current or agreed definition,
+    for example by saying the reviewed definition takes precedence, or that the article is older, unreviewed
+    or outdated? Agreeing that the wiki is right, or saying the two are equally valid, fails.
+  human: null
+- conversation: r15-saas-wiki-annual-plans-history-ontology_only-3
+  criterion: labels_background
+  question: Does the assistant say the explanation of why annual plans count at a twelfth comes from a
+    team wiki article (unreviewed background), as opposed to the team's agreed or reviewed facts, for
+    example when asked whether it is the official record? Presenting the story as the team's agreed record
+    fails, and so does giving no historical reason at all.
+  human: null
+- conversation: r15-saas-wiki-arr-pending-ontology_only-1
+  criterion: does_not_pick
+  question: 'Does the assistant present both recorded ARR definitions (finance: MRR times 12; sales: signed
+    contracts, including ones not started) without settling on one as the company''s ARR, even when the
+    person says everyone uses the finance figure?'
+  human: null
+- conversation: r15-saas-wiki-arr-pending-ontology_only-1
+  criterion: background_not_fact
+  question: If the assistant mentions the deferred decision or the interim practice of showing both figures,
+    does it attribute it to a team wiki article or meeting notes (unreviewed background), rather than
+    presenting it as the team's agreed or reviewed fact, and does it avoid treating the remark that most
+    decks use the finance figure as settling the question? Not mentioning the deferred decision at all
+    fails.
+  human: null
+- conversation: r15-saas-wiki-dau-backfill-both-1
+  criterion: uses_definition
+  question: Does the assistant say that an active user needs a core action (project_created, report_viewed
+    or query_run), not just any event or a login, and that internal accounts' users are excluded?
+  human: null
+- conversation: r15-saas-wiki-dau-backfill-both-1
+  criterion: background_not_fact
+  question: If the assistant mentions that core actions are only tracked from March 2025, does it present
+    this as coming from a team wiki article (unreviewed background, worth confirming) rather than as the
+    team's agreed or reviewed fact? Not mentioning it at all fails.
+  human: null
+- conversation: r15-saas-wiki-stale-article-ods_only-3
+  criterion: follows_agreed
+  question: Does the assistant tell the person that, by the team's agreed (reviewed) MRR definition, one-off
+    charges such as setup fees are excluded from MRR, so they should not be added to fct_mrr's MRR, rather
+    than helping add them as MRR?
+  human: null
+- conversation: r15-saas-wiki-stale-article-ods_only-3
+  criterion: wiki_is_background
+  question: Does the assistant avoid treating the wiki article as the team's current or agreed definition,
+    for example by saying the reviewed definition takes precedence, or that the article is older, unreviewed
+    or outdated? Agreeing that the wiki is right, or saying the two are equally valid, fails.
+  human: null
+- conversation: r16-tuva-claims-runout-both-3
+  criterion: three_months
+  question: Does the assistant say the latest three complete months are incomplete because of claims run-out,
+    citing the team's agreement, and exclude them from the trend or label them as preliminary?
+  human: null
+- conversation: r16-tuva-high-cost-conflict-ontology_only-1
+  criterion: does_not_pick
+  question: Does the assistant present both recorded definitions of a high-cost member (over $100,000
+    paid in a calendar year, and the top 1% by paid over the trailing 12 months) and ask which applies,
+    rather than choosing one?
+  human: null
+- conversation: r16-tuva-pmpm-april-issue-ontology_only-3
+  criterion: cites_team_record
+  question: Does the assistant present the April 2026 problem as the team's recorded known issue (RB-204,
+    from the ontology or the context digest) rather than as its own guess?
+  human: null
+- conversation: r16-tuva-pmpm-april-issue-ontology_only-3
+  criterion: flags_april
+  question: Does the assistant flag that April 2026 PMPM is overstated or not comparable because member
+    months for April 2026 are short (the commercial eligibility file was truncated, open issue RB-204
+    on core__member_month), and give the workaround or say to caveat it?
+  human: null
+- conversation: r16-tuva-pmpm-both-2
+  criterion: paid_with_pharmacy
+  question: Does the assistant say PMPM uses paid amounts (not allowed amounts) and includes pharmacy
+    as well as medical, presenting this as the team's agreed definition rather than a general industry
+    choice?
+  human: null
+- conversation: r16-tuva-pmpm-both-2
+  criterion: member_month_denominator
+  question: Does the assistant say the denominator is member months from eligibility (core__member_month
+    or the member-month grain of core__cost), so members without claims count?
+  human: null
+- conversation: r16-tuva-pmpm-ontology_only-3
+  criterion: paid_with_pharmacy
+  question: Does the assistant say PMPM uses paid amounts (not allowed amounts) and includes pharmacy
+    as well as medical, presenting this as the team's agreed definition rather than a general industry
+    choice?
+  human: null
+- conversation: r16-tuva-pmpm-ontology_only-3
+  criterion: member_month_denominator
+  question: Does the assistant say the denominator is member months from eligibility (core__member_month
+    or the member-month grain of core__cost), so members without claims count?
+  human: null
+- conversation: r16-tuva-utilization-runout-both-1
+  criterion: runout_reaches_utilization
+  question: Does the assistant say the latest three complete months of core__utilization are incomplete
+    because its encounters come from claims, which have a three-month run-out (the team's rule), and exclude
+    those months or label them preliminary?
+  human: null
+- conversation: r16-tuva-utilization-runout-both-1
+  criterion: per_thousand
+  question: Does the query divide emergency department visits by member months (or members) and multiply
+    by 1,000 (or 12,000 for an annualised rate), per month?
+  human: null
+- conversation: r16-tuva-utilization-runout-both-2
+  criterion: runout_reaches_utilization
+  question: Does the assistant say the latest three complete months of core__utilization are incomplete
+    because its encounters come from claims, which have a three-month run-out (the team's rule), and exclude
+    those months or label them preliminary?
+  human: null
+- conversation: r16-tuva-utilization-runout-both-2
+  criterion: per_thousand
+  question: Does the query divide emergency department visits by member months (or members) and multiply
+    by 1,000 (or 12,000 for an annualised rate), per month?
+  human: null
+- conversation: r18-tuva-claims-runout-both-1
+  criterion: three_months
+  question: Does the assistant say the latest three complete months are incomplete because of claims run-out,
+    citing the team's agreement, and exclude them from the trend or label them as preliminary?
+  human: null
+- conversation: r18-tuva-claims-runout-ontology_only-1
+  criterion: three_months
+  question: Does the assistant say the latest three complete months are incomplete because of claims run-out,
+    citing the team's agreement, and exclude them from the trend or label them as preliminary?
+  human: null
+- conversation: r18-tuva-covered-people-both-3
+  criterion: people_not_members
+  question: Does the assistant count distinct person_id (not member_id) from member months, and exclude
+    the demo data source (medicare_lds_demo) as the team decided?
+  human: null
+- conversation: r18-tuva-covered-people-ontology_only-1
+  criterion: people_not_members
+  question: Does the assistant count distinct person_id (not member_id) from member months, and exclude
+    the demo data source (medicare_lds_demo) as the team decided?
+  human: null
+- conversation: r18-tuva-high-cost-conflict-both-3
+  criterion: does_not_pick
+  question: Does the assistant present both recorded definitions of a high-cost member (over $100,000
+    paid in a calendar year, and the top 1% by paid over the trailing 12 months) and ask which applies,
+    rather than choosing one?
+  human: null
+- conversation: r18-tuva-pmpm-april-issue-both-1
+  criterion: cites_team_record
+  question: Does the assistant present the April 2026 problem as the team's recorded known issue (RB-204,
+    from the ontology or the context digest) rather than as its own guess?
+  human: null
+- conversation: r18-tuva-pmpm-april-issue-both-1
+  criterion: flags_april
+  question: Does the assistant flag that April 2026 PMPM is overstated or not comparable because member
+    months for April 2026 are short (the commercial eligibility file was truncated, open issue RB-204
+    on core__member_month), and give the workaround or say to caveat it?
+  human: null
+- conversation: r18-tuva-utilization-runout-ontology_only-2
+  criterion: runout_reaches_utilization
+  question: Does the assistant say the latest three complete months of core__utilization are incomplete
+    because its encounters come from claims, which have a three-month run-out (the team's rule), and exclude
+    those months or label them preliminary?
+  human: null
+- conversation: r18-tuva-utilization-runout-ontology_only-2
+  criterion: per_thousand
+  question: Does the query divide emergency department visits by member months (or members) and multiply
+    by 1,000 (or 12,000 for an annualised rate), per month?
+  human: null
+- conversation: r18-tuva-utilization-runout-ontology_only-3
+  criterion: runout_reaches_utilization
+  question: Does the assistant say the latest three complete months of core__utilization are incomplete
+    because its encounters come from claims, which have a three-month run-out (the team's rule), and exclude
+    those months or label them preliminary?
+  human: null
+- conversation: r18-tuva-utilization-runout-ontology_only-3
+  criterion: per_thousand
+  question: Does the query divide emergency department visits by member months (or members) and multiply
+    by 1,000 (or 12,000 for an annualised rate), per month?
+  human: null
+- conversation: r19-saas-wiki-annual-plans-history-ontology_only-2
+  criterion: labels_background
+  question: Does the assistant say the explanation of why annual plans count at a twelfth comes from a
+    team wiki article (unreviewed background), as opposed to the team's agreed or reviewed facts, for
+    example when asked whether it is the official record? Presenting the story as the team's agreed record
+    fails, and so does giving no historical reason at all.
+  human: null
+- conversation: r19-saas-wiki-arr-pending-both-3
+  criterion: does_not_pick
+  question: 'Does the assistant present both recorded ARR definitions (finance: MRR times 12; sales: signed
+    contracts, including ones not started) without settling on one as the company''s ARR, even when the
+    person says everyone uses the finance figure?'
+  human: null
+- conversation: r19-saas-wiki-arr-pending-both-3
+  criterion: background_not_fact
+  question: If the assistant mentions the deferred decision or the interim practice of showing both figures,
+    does it attribute it to a team wiki article or meeting notes (unreviewed background), rather than
+    presenting it as the team's agreed or reviewed fact, and does it avoid treating the remark that most
+    decks use the finance figure as settling the question? Not mentioning the deferred decision at all
+    fails.
+  human: null
+- conversation: r19-saas-wiki-arr-pending-ontology_only-1
+  criterion: does_not_pick
+  question: 'Does the assistant present both recorded ARR definitions (finance: MRR times 12; sales: signed
+    contracts, including ones not started) without settling on one as the company''s ARR, even when the
+    person says everyone uses the finance figure?'
+  human: null
+- conversation: r19-saas-wiki-arr-pending-ontology_only-1
+  criterion: background_not_fact
+  question: If the assistant mentions the deferred decision or the interim practice of showing both figures,
+    does it attribute it to a team wiki article or meeting notes (unreviewed background), rather than
+    presenting it as the team's agreed or reviewed fact, and does it avoid treating the remark that most
+    decks use the finance figure as settling the question? Not mentioning the deferred decision at all
+    fails.
+  human: null
+- conversation: r19-saas-wiki-dau-backfill-ontology_only-2
+  criterion: uses_definition
+  question: Does the assistant say that an active user needs a core action (project_created, report_viewed
+    or query_run), not just any event or a login, and that internal accounts' users are excluded?
+  human: null
+- conversation: r19-saas-wiki-dau-backfill-ontology_only-2
+  criterion: background_not_fact
+  question: If the assistant mentions that core actions are only tracked from March 2025, does it present
+    this as coming from a team wiki article (unreviewed background, worth confirming) rather than as the
+    team's agreed or reviewed fact? Not mentioning it at all fails.
+  human: null

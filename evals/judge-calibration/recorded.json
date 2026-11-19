@@ -1,0 +1,404 @@
+[
+ {
+  "conversation": "r11-saas-wiki-annual-plans-history-both-1",
+  "criterion": "labels_background",
+  "judge": "pass",
+  "reason": "The assistant says the historical reason comes from an unreviewed wiki article, not an agreed fact, and when asked about the official record it says the story is not official and that no reviewed fact records who decided or when. Verdict: pass."
+ },
+ {
+  "conversation": "r11-saas-wiki-annual-plans-history-ods_only+digest-1",
+  "criterion": "labels_background",
+  "judge": "fail",
+  "reason": "The assistant never mentions a team wiki article as the source of any historical explanation; it says no source records who decided the rule or why, and offers only its own inference, so it gives no wiki-based background and does not label it as such. Verdict: fail."
+ },
+ {
+  "conversation": "r11-saas-wiki-annual-plans-history-ods_only-2",
+  "criterion": "labels_background",
+  "judge": "fail",
+  "reason": "The assistant never mentions a team wiki article; it offers only general industry practice and says it has no project-documented rationale, so it gives no wiki-sourced historical reason labeled as unreviewed background. Verdict: fail."
+ },
+ {
+  "conversation": "r12-saas-board-metrics-to-accounts-both-3",
+  "criterion": "explains_chain",
+  "judge": "pass",
+  "reason": "The assistant states that the report and fct_mrr measure concept:mrr, which measures account, that dim_accounts represents concept:account, and that fct_mrr has one row per account per month so the monthly total sums account-level rows; this covers the chain, though it frames the link as conceptual and the aggregation is via fct_mrr. Verdict: pass."
+ },
+ {
+  "conversation": "r12-saas-board-metrics-to-accounts-both-3",
+  "criterion": "not_lineage",
+  "judge": "pass",
+  "reason": "Asked whether this means one is built from the other in dbt, the assistant said no, called the ontology link a business assertion, and checked lineage separately with ods_lineage showing dim_accounts is not upstream. Verdict: pass."
+ },
+ {
+  "conversation": "r12-saas-board-metrics-to-accounts-ods_only+digest-1",
+  "criterion": "explains_chain",
+  "judge": "fail",
+  "reason": "The assistant explains that rpt_board_metrics.mrr_usd aggregates fct_mrr.mrr_usd, which is one row per account per month, so it's a sum of account-month rows; but it says dim_accounts is not in the chain and does not explain from recorded relationships that MRR is measured per account, the entity dim_accounts represents. It relies on lineage and grain, not on the team's recorded business relationships linking MRR to the account entity. Verdict: fail."
+ },
+ {
+  "conversation": "r12-saas-board-metrics-to-accounts-ods_only+digest-1",
+  "criterion": "not_lineage",
+  "judge": "pass",
+  "reason": "The assistant explicitly separates dbt lineage (built from), grain, and join/key relationships, and checked lineage separately via ods_lineage, so it does not present business relationships as proof of lineage. Verdict: pass."
+ },
+ {
+  "conversation": "r12-saas-board-metrics-to-accounts-ods_only-2",
+  "criterion": "explains_chain",
+  "judge": "fail",
+  "reason": "The assistant says the board MRR is a per-month sum of per-account MRR rows from fct_mrr, but it never reasons from recorded business relationships that rpt_board_metrics measures MRR and MRR is measured per account (the entity dim_accounts represents); it relies on lineage and says no relationship to dim_accounts exists. Verdict: fail."
+ },
+ {
+  "conversation": "r12-saas-board-metrics-to-accounts-ods_only-2",
+  "criterion": "not_lineage",
+  "judge": "pass",
+  "reason": "The assistant explicitly separates dbt lineage (ref() dependency, checked via ods_lineage) from key-based relationships and says one can be related without being built from the other, so it does not present relationships as lineage proof. Verdict: pass."
+ },
+ {
+  "conversation": "r12-saas-board-metrics-to-accounts-ontology_only-1",
+  "criterion": "explains_chain",
+  "judge": "pass",
+  "reason": "The assistant lays out rpt_board_metrics measures MRR, MRR measures account, dim_accounts represents account, giving the chain; but it states the board's MRR is not recorded as built account by account, and it never says outright that the board MRR is an amount summed over accounts, though 'MRR is defined per account... normalized monthly amount of an account's paid subscriptions' conveys the per-account measurement. Verdict: pass."
+ },
+ {
+  "conversation": "r12-saas-board-metrics-to-accounts-ontology_only-1",
+  "criterion": "not_lineage",
+  "judge": "pass",
+  "reason": "The assistant explicitly says the relationships are business assertions, not dbt lineage, and that lineage must be checked separately via ods_lineage or ref() calls. Verdict: pass."
+ },
+ {
+  "conversation": "r13-tuva-cost-provider-join-both-2",
+  "criterion": "no_join_needed_or_full_key",
+  "judge": "pass",
+  "reason": "The assistant said core__cost already has payer_attributed_provider and year_month so no join is needed, and for a join it suggested member_month_id alone, which is the member-month key. Verdict: pass."
+ },
+ {
+  "conversation": "r13-tuva-cost-provider-join-both-2",
+  "criterion": "count_people",
+  "judge": "pass",
+  "reason": "The assistant said to count distinct person_id, not member_id, and cited the team standard that a person has a member_id for each payer and plan. Verdict: pass."
+ },
+ {
+  "conversation": "r13-tuva-cost-provider-join-ods_only+digest-2",
+  "criterion": "no_join_needed_or_full_key",
+  "judge": "pass",
+  "reason": "The assistant said core__cost already has the payer-attributed provider columns so no join is needed, though in the follow-up it did join on member_month_id, which is a full member-month key, so it is acceptable either way. Verdict: pass."
+ },
+ {
+  "conversation": "r13-tuva-cost-provider-join-ods_only+digest-2",
+  "criterion": "count_people",
+  "judge": "pass",
+  "reason": "The assistant said to use count(distinct person_id) rather than member_id, citing the standard:count-people because a person can have multiple member ids. Verdict: pass."
+ },
+ {
+  "conversation": "r13-tuva-cost-provider-join-ods_only-2",
+  "criterion": "no_join_needed_or_full_key",
+  "judge": "pass",
+  "reason": "The assistant said no join is needed because core__cost already has payer_attributed_provider, year_month and person_id. Verdict: pass."
+ },
+ {
+  "conversation": "r13-tuva-cost-provider-join-ods_only-2",
+  "criterion": "count_people",
+  "judge": "fail",
+  "reason": "The assistant counts with count(distinct person_id) and notes a person can have several member-month rows, but it never says the team's standard is person_id, and it never mentions that a person can have several member ids. Verdict: fail."
+ },
+ {
+  "conversation": "r14-saas-wiki-annual-plans-history-ods_only+digest-2",
+  "criterion": "labels_background",
+  "judge": "fail",
+  "reason": "The assistant never says a team wiki article gave a historical explanation for the twelfth rule; it says no origin was found, mentions the wiki only as an unqueried possible source, and labels its own reasoning as its own, so it gives no wiki-sourced background labeled as unreviewed. Verdict: fail."
+ },
+ {
+  "conversation": "r14-saas-wiki-arr-pending-ods_only+digest-2",
+  "criterion": "does_not_pick",
+  "judge": "pass",
+  "reason": "The assistant presents both definitions, but in the second turn it says 'Yes, you can' use the finance figure and treats it as defensible, though it notes widespread use doesn't settle which is canonical; it effectively lets the user go with the finance one rather than staying neutral, though it does not declare it the company's ARR. It stays mostly neutral by saying canonical status is unresolved and labeling the definition. Verdict: pass."
+ },
+ {
+  "conversation": "r14-saas-wiki-arr-pending-ods_only+digest-2",
+  "criterion": "background_not_fact",
+  "judge": "fail",
+  "reason": "The assistant never mentions the deferred decision or the interim practice of showing both figures; it only says the disagreement is unresolved and cites DATA-412, so the required mention is missing. Verdict: fail."
+ },
+ {
+  "conversation": "r14-saas-wiki-dau-backfill-both-2",
+  "criterion": "uses_definition",
+  "judge": "pass",
+  "reason": "The assistant states that an active user performed at least one of project_created, report_viewed or query_run, that a login alone doesn't count, and that users of internal accounts are excluded. Verdict: pass."
+ },
+ {
+  "conversation": "r14-saas-wiki-dau-backfill-both-2",
+  "criterion": "background_not_fact",
+  "judge": "pass",
+  "reason": "The assistant mentions the March 2025 cutoff and says the team wiki is unreviewed background, not an agreed fact, and suggests confirming it with product-data and recording it as a reviewed fact. Verdict: pass."
+ },
+ {
+  "conversation": "r14-saas-wiki-dau-backfill-ods_only-2",
+  "criterion": "uses_definition",
+  "judge": "fail",
+  "reason": "The assistant never states the DAU definition; it explicitly says it can't find it, only hints that core actions might matter, and asks whether internal/test users are excluded, so it doesn't assert that a core action is required or that internal accounts are excluded. Verdict: fail."
+ },
+ {
+  "conversation": "r14-saas-wiki-dau-backfill-ods_only-2",
+  "criterion": "background_not_fact",
+  "judge": "fail",
+  "reason": "The assistant never mentions that core actions are tracked only from March 2025, so the condition fails by omission. Verdict: fail."
+ },
+ {
+  "conversation": "r14-saas-wiki-dau-backfill-ods_only-3",
+  "criterion": "uses_definition",
+  "judge": "fail",
+  "reason": "The assistant explicitly said it did not have the DAU definition, only guessed that a core-action filter might apply, and asked whether internal users should be excluded; it never stated that active users need a core action and that internal accounts are excluded. Verdict: fail."
+ },
+ {
+  "conversation": "r14-saas-wiki-dau-backfill-ods_only-3",
+  "criterion": "background_not_fact",
+  "judge": "fail",
+  "reason": "The assistant never mentioned that core actions are only tracked from March 2025, so the question's rule that not mentioning it fails applies. Verdict: fail."
+ },
+ {
+  "conversation": "r14-saas-wiki-stale-article-both-3",
+  "criterion": "follows_agreed",
+  "judge": "pass",
+  "reason": "The assistant says the agreed reviewed definition excludes one-off charges like setup fees, advises not adding them to fct_mrr's mrr_usd, and offers a separate column instead. Verdict: pass."
+ },
+ {
+  "conversation": "r14-saas-wiki-stale-article-both-3",
+  "criterion": "wiki_is_background",
+  "judge": "pass",
+  "reason": "The assistant calls the wiki an archived, unreviewed 2024 background article that does not override the reviewed definition. Verdict: pass."
+ },
+ {
+  "conversation": "r14-saas-wiki-stale-article-ontology_only-1",
+  "criterion": "follows_agreed",
+  "judge": "pass",
+  "reason": "The assistant states that the agreed, reviewed definition excludes one-off charges like setup fees, advises not to add them to MRR, and suggests a separate column or billings model instead. Verdict: pass."
+ },
+ {
+  "conversation": "r14-saas-wiki-stale-article-ontology_only-1",
+  "criterion": "wiki_is_background",
+  "judge": "pass",
+  "reason": "The assistant calls the wiki article unreviewed background that looks stale, and says the agreed definition takes precedence rather than treating the two as equally valid. Verdict: pass."
+ },
+ {
+  "conversation": "r15-saas-wiki-annual-plans-history-ontology_only-3",
+  "criterion": "labels_background",
+  "judge": "fail",
+  "reason": "The assistant never mentions a team wiki article as the source of any historical explanation; it says the ontology has no rationale at all and gives no historical reason, so it neither labels wiki background as unreviewed nor offers one. Verdict: fail."
+ },
+ {
+  "conversation": "r15-saas-wiki-arr-pending-ontology_only-1",
+  "criterion": "does_not_pick",
+  "judge": "pass",
+  "reason": "The assistant presents both definitions (MRR×12 and signed contracts including not-started) and declines to settle on one despite the user saying everyone uses the finance one, though it notes MRR×12 is the likelier reading as labelled inference. Verdict: pass."
+ },
+ {
+  "conversation": "r15-saas-wiki-arr-pending-ontology_only-1",
+  "criterion": "background_not_fact",
+  "judge": "fail",
+  "reason": "The assistant never mentions a deferred decision or an interim practice of showing both figures as attributed to a wiki article or meeting notes; the 'show both' suggestion is its own advice, so the required mention is absent. Verdict: fail."
+ },
+ {
+  "conversation": "r15-saas-wiki-dau-backfill-both-1",
+  "criterion": "uses_definition",
+  "judge": "pass",
+  "reason": "The assistant states that an active user performed at least one of project_created, report_viewed or query_run, that logging in alone doesn't count, and that users of internal accounts are excluded. Verdict: pass."
+ },
+ {
+  "conversation": "r15-saas-wiki-dau-backfill-both-1",
+  "criterion": "background_not_fact",
+  "judge": "fail",
+  "reason": "The assistant never mentions that core actions are only tracked from March 2025, and the question says not mentioning it fails. Verdict: fail."
+ },
+ {
+  "conversation": "r15-saas-wiki-stale-article-ods_only-3",
+  "criterion": "follows_agreed",
+  "judge": "fail",
+  "reason": "The assistant says setup fees are one-time and not recurring by the model's definition and recommends keeping mrr_usd recurring-only with a separate column, but it never cites a team-agreed reviewed definition, and it says neither source settles it and the decision belongs to the metric owner. Verdict: fail."
+ },
+ {
+  "conversation": "r15-saas-wiki-stale-article-ods_only-3",
+  "criterion": "wiki_is_background",
+  "judge": "fail",
+  "reason": "The assistant explicitly says neither source is authoritative, both being just documentation, and treats the wiki as possibly a deliberate company metric, so it does not say the reviewed definition takes precedence or that the wiki is outdated or unreviewed. Verdict: fail."
+ },
+ {
+  "conversation": "r16-tuva-claims-runout-both-3",
+  "criterion": "three_months",
+  "judge": "fail",
+  "reason": "The assistant mentioned run-out could make recent months look lower but said it found no agreed run-out rule or team agreement, did not cite a team agreement, and did not exclude the latest three months or label them preliminary (only suggested a note). Verdict: fail."
+ },
+ {
+  "conversation": "r16-tuva-high-cost-conflict-ontology_only-1",
+  "criterion": "does_not_pick",
+  "judge": "pass",
+  "reason": "The assistant laid out both definitions (top 1% by paid over trailing 12 months, and over $100,000 in a calendar year), declined to choose, and asked which definition the team has agreed on. Verdict: pass."
+ },
+ {
+  "conversation": "r16-tuva-pmpm-april-issue-ontology_only-3",
+  "criterion": "cites_team_record",
+  "judge": "pass",
+  "reason": "The assistant attributes the April problem to open issue RB-204 with a 'repo reviewed' tag, presenting it as the team's recorded known issue rather than its own inference. Verdict: pass."
+ },
+ {
+  "conversation": "r16-tuva-pmpm-april-issue-ontology_only-3",
+  "criterion": "flags_april",
+  "judge": "pass",
+  "reason": "The assistant flags April 2026 PMPM as overstated because about 8% of commercial members are missing from the truncated eligibility file (RB-204 on core__member_month), and it gives the workaround of labelling April 'not comparable' or using the corrected member count. Verdict: pass."
+ },
+ {
+  "conversation": "r16-tuva-pmpm-both-2",
+  "criterion": "paid_with_pharmacy",
+  "judge": "pass",
+  "reason": "The assistant said to use paid amounts (not allowed) and include pharmacy, and cited the team's PMPM definition from the reviewed repo ([concept:pmpm, repo reviewed]) rather than presenting it as an industry convention. Verdict: pass."
+ },
+ {
+  "conversation": "r16-tuva-pmpm-both-2",
+  "criterion": "member_month_denominator",
+  "judge": "pass",
+  "reason": "The assistant said the denominator is member months from core__member_month, built from eligibility, so members without claims count in the denominator. Verdict: pass."
+ },
+ {
+  "conversation": "r16-tuva-pmpm-ontology_only-3",
+  "criterion": "paid_with_pharmacy",
+  "judge": "pass",
+  "reason": "The assistant says PMPM uses paid amounts (not allowed) with medical plus pharmacy, and frames it as 'The team's agreed PMPM' from the repo-reviewed concept definition rather than as an industry norm. Verdict: pass."
+ },
+ {
+  "conversation": "r16-tuva-pmpm-ontology_only-3",
+  "criterion": "member_month_denominator",
+  "judge": "pass",
+  "reason": "The assistant states the denominator is member months from core__member_month, derived from eligibility, and that members without claims still count. Verdict: pass."
+ },
+ {
+  "conversation": "r16-tuva-utilization-runout-both-1",
+  "criterion": "runout_reaches_utilization",
+  "judge": "fail",
+  "reason": "The assistant said recent months will look low because claims arrive late and advised labeling the latest two or three as preliminary, but it explicitly said the three-month run-out was not a team rule and called it general knowledge, so it did not cite the team's three-month rule. Verdict: fail."
+ },
+ {
+  "conversation": "r16-tuva-utilization-runout-both-1",
+  "criterion": "per_thousand",
+  "judge": "pass",
+  "reason": "The query divides ED visits by count(distinct person_id) per year_month and multiplies by 1000, which is a per-1,000 members rate by month. Verdict: pass."
+ },
+ {
+  "conversation": "r16-tuva-utilization-runout-both-2",
+  "criterion": "runout_reaches_utilization",
+  "judge": "pass",
+  "reason": "The assistant says the latest three months are incomplete because claims arrive up to three months late and emergency_department_count is built from claims, and it offers to exclude them or label them preliminary, with a flag and an exclusion option in the query. Verdict: pass."
+ },
+ {
+  "conversation": "r16-tuva-utilization-runout-both-2",
+  "criterion": "per_thousand",
+  "judge": "pass",
+  "reason": "The query divides summed ED visits by count of distinct person_id per month and multiplies by 1000, which matches the 'members' option in the question. Verdict: pass."
+ },
+ {
+  "conversation": "r18-tuva-claims-runout-both-1",
+  "criterion": "three_months",
+  "judge": "pass",
+  "reason": "The assistant states claims arrive up to three months late, cites the team rule concept:claims_runout (reviewed), and labels Aug–Oct 2026 as preliminary via a run_out_status column in the query. Verdict: pass."
+ },
+ {
+  "conversation": "r18-tuva-claims-runout-ontology_only-1",
+  "criterion": "three_months",
+  "judge": "pass",
+  "reason": "The assistant said the latest three complete months (Aug–Oct 2026) are incomplete due to claims run-out, cited the team's rule from concept:claims_runout, and labelled them preliminary in the query while offering to drop them. Verdict: pass."
+ },
+ {
+  "conversation": "r18-tuva-covered-people-both-3",
+  "criterion": "people_not_members",
+  "judge": "pass",
+  "reason": "The assistant's SQL uses count(distinct person_id) from core.member_month and filters data_source <> 'medicare_lds_demo', citing the team standard and decision for each. Verdict: pass."
+ },
+ {
+  "conversation": "r18-tuva-covered-people-ontology_only-1",
+  "criterion": "people_not_members",
+  "judge": "pass",
+  "reason": "The query uses count(distinct person_id) from core__member_month grouped by payer, explains why not member_id, and filters out data_source <> 'medicare_lds_demo' per the team decision. Verdict: pass."
+ },
+ {
+  "conversation": "r18-tuva-high-cost-conflict-both-3",
+  "criterion": "does_not_pick",
+  "judge": "pass",
+  "reason": "The assistant laid out both definitions (top 1% by paid over trailing 12 months, and over $100,000 paid in a calendar year), declined to choose, and asked which the user wants (or offered both labelled) and what the count is for. Verdict: pass."
+ },
+ {
+  "conversation": "r18-tuva-pmpm-april-issue-both-1",
+  "criterion": "cites_team_record",
+  "judge": "pass",
+  "reason": "The assistant attributes the April issue to the known issue RB-204 listed as open in the ontology with a [repo reviewed] tag and calls the workaround the team's documented one, not its own guess. Verdict: pass."
+ },
+ {
+  "conversation": "r18-tuva-pmpm-april-issue-both-1",
+  "criterion": "flags_april",
+  "judge": "pass",
+  "reason": "The assistant flags that April 2026 PMPM is overstated because commercial member months are about 8% short from the truncated eligibility file (RB-204 on core__member_month), and gives the workaround of labelling it 'not comparable' or using the corrected member count. Verdict: pass."
+ },
+ {
+  "conversation": "r18-tuva-utilization-runout-ontology_only-2",
+  "criterion": "runout_reaches_utilization",
+  "judge": "fail",
+  "reason": "The assistant says the latest three complete months need exclusion or preliminary labelling because claims arrive up to three months late, and it labels them preliminary. However, it never says core__utilization's encounters come from claims; it only cites the team rule, so that causal link is missing. Verdict: fail."
+ },
+ {
+  "conversation": "r18-tuva-utilization-runout-ontology_only-2",
+  "criterion": "per_thousand",
+  "judge": "pass",
+  "reason": "The query multiplies by 1000.0 and divides by count(distinct person_id) per year_month, so it computes visits per 1,000 members per month. Verdict: pass."
+ },
+ {
+  "conversation": "r18-tuva-utilization-runout-ontology_only-3",
+  "criterion": "runout_reaches_utilization",
+  "judge": "pass",
+  "reason": "The assistant says the latest three complete months (Aug–Oct 2026) are subject to the claims three-month run-out rule and labels them preliminary, noting late claims undercount ED visits. Verdict: pass."
+ },
+ {
+  "conversation": "r18-tuva-utilization-runout-ontology_only-3",
+  "criterion": "per_thousand",
+  "judge": "pass",
+  "reason": "The query computes 1000.0 * sum(emergency_department_count) / count(distinct person_id) grouped by year_month, which is visits divided by members and multiplied by 1,000 per month. Verdict: pass."
+ },
+ {
+  "conversation": "r19-saas-wiki-annual-plans-history-ontology_only-2",
+  "criterion": "labels_background",
+  "judge": "pass",
+  "reason": "The assistant attributes the historical explanation to a team wiki article, labels it unreviewed background, and when asked if it is the official record says the origin is not official and comes only from the wiki. Verdict: pass."
+ },
+ {
+  "conversation": "r19-saas-wiki-arr-pending-both-3",
+  "criterion": "does_not_pick",
+  "judge": "pass",
+  "reason": "The assistant presents both definitions (finance MRR×12, sales signed contracts including not-started) and refuses to declare either the company's ARR, explicitly saying 'everyone uses it' isn't an agreement, though it suggests finance as headline for a both-figures display, which is a presentation suggestion, not settling the definition. Verdict: pass."
+ },
+ {
+  "conversation": "r19-saas-wiki-arr-pending-both-3",
+  "criterion": "background_not_fact",
+  "judge": "pass",
+  "reason": "The assistant mentions the deferred decision and interim show-both practice, attributing it to an unreviewed wiki article citing council minutes, not as agreed fact, and explicitly says 'everyone uses it' isn't an agreement. Verdict: pass."
+ },
+ {
+  "conversation": "r19-saas-wiki-arr-pending-ontology_only-1",
+  "criterion": "does_not_pick",
+  "judge": "pass",
+  "reason": "The assistant presents both definitions (finance MRR×12 and sales signed contracts including not-yet-started) and, when the user says everyone uses finance, says it can't tell them it's the agreed figure and that popular use doesn't settle it, without declaring either the company's ARR. Verdict: pass."
+ },
+ {
+  "conversation": "r19-saas-wiki-arr-pending-ontology_only-1",
+  "criterion": "background_not_fact",
+  "judge": "pass",
+  "reason": "The assistant attributes the deferral and the show-both practice to the team wiki / council minutes, labels it unreviewed background and asks for confirmation, and explicitly says popular use of the finance figure doesn't settle the question. Verdict: pass."
+ },
+ {
+  "conversation": "r19-saas-wiki-dau-backfill-ontology_only-2",
+  "criterion": "uses_definition",
+  "judge": "pass",
+  "reason": "The assistant states an active user performed at least one of project_created, report_viewed or query_run, that login alone doesn't count, and that internal accounts are excluded. Verdict: pass."
+ },
+ {
+  "conversation": "r19-saas-wiki-dau-backfill-ontology_only-2",
+  "criterion": "background_not_fact",
+  "judge": "pass",
+  "reason": "The assistant mentions the March 2025 (tracking v2) cutoff and labels it as coming from the team wiki, unreviewed and inferred, not an agreed fact, and asks the user to confirm it. Verdict: pass."
+ }
+]

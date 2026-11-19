@@ -10,13 +10,16 @@
 //! `ONTO_HUMAN_API_KEY`, also falling back to the agent's model. `ods` must be
 //! installed (or `ONTO_ODS_BIN`).
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
 use clap::Parser;
+use onto_testkit::Transcript;
 use onto_testkit::agent::{ModelConfig, RequestBudget};
+use onto_testkit::calibration;
 use onto_testkit::claude_code::ClaudeCodeConfig;
-use onto_testkit::eval::{Agent, Cast, Condition, RunResult, Task, errors, render_chat, report, run_task};
+use onto_testkit::eval::{Agent, Cast, Condition, RunResult, Task, errors, judge_conversation, render, render_chat, report, run_task};
 use onto_testkit::fixture::repo_root;
 use onto_testkit::human::PersonHistory;
 
@@ -68,6 +71,22 @@ struct Args {
     /// and without a wiki): per condition, the paired difference first − second.
     #[arg(long, num_args = 2, value_names = ["FIRST", "SECOND"])]
     compare: Option<Vec<PathBuf>>,
+    /// Check the judge against hand-labelled answers (#57): Cohen's κ between
+    /// the labels and the judge's recorded verdicts, with no model calls. The
+    /// directory defaults to `evals/judge-calibration`.
+    #[arg(long, num_args = 0..=1, value_name = "DIR")]
+    calibrate: Option<Option<PathBuf>>,
+    /// With --calibrate: ask the judge model again instead of using its
+    /// recorded verdicts.
+    #[arg(long, requires = "calibrate")]
+    live: bool,
+    /// With --calibrate --live: save the new verdicts as the recorded ones.
+    #[arg(long, requires = "live")]
+    record: bool,
+    /// Label a calibration set by hand: each unlabelled item's conversation
+    /// and question, without the judge's verdict. Saves after every answer.
+    #[arg(long, num_args = 0..=1, value_name = "DIR")]
+    label: Option<Option<PathBuf>>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, clap::ValueEnum)]
@@ -87,9 +106,95 @@ fn role_config(agent: &ModelConfig, role: &str) -> ModelConfig {
     }
 }
 
+/// The judge model alone, for calibration: as an eval run would configure it.
+fn judge_from_env() -> Result<Agent> {
+    if std::env::var("ONTO_AGENT").is_ok_and(|a| a == "claude-code") {
+        let config = ClaudeCodeConfig::from_env();
+        let model = std::env::var("ONTO_JUDGE_MODEL").ok().filter(|m| !m.is_empty()).or(config.model.clone());
+        return Ok(Agent::ClaudeCode(ClaudeCodeConfig { model, ..config }));
+    }
+    let Some(config) = ModelConfig::from_env() else {
+        bail!("set ONTO_LLM_BASE_URL (and ONTO_LLM_MODEL, ONTO_LLM_API_KEY, or ONTO_JUDGE_*), or ONTO_AGENT=claude-code")
+    };
+    Ok(Agent::Api(role_config(&config, "JUDGE")))
+}
+
+fn calibration_dir(dir: &Option<PathBuf>) -> PathBuf {
+    dir.clone().unwrap_or_else(|| repo_root().join("evals/judge-calibration"))
+}
+
+async fn calibrate(dir: &Option<PathBuf>, live: bool, record: bool) -> Result<()> {
+    let set = calibration::Set::load(&calibration_dir(dir))?;
+    let (verdicts, source) = if live {
+        let judge = judge_from_env()?;
+        let mut by_conversation: BTreeMap<&str, Vec<(&str, &str)>> = BTreeMap::new();
+        for item in &set.items {
+            by_conversation.entry(&item.conversation).or_default().push((&item.criterion, &item.question));
+        }
+        let mut verdicts = Vec::new();
+        for (conversation, questions) in by_conversation {
+            eprintln!("judging {conversation} ({} questions)", questions.len());
+            let transcript = Transcript::from_jsonl(&std::fs::read_to_string(set.conversation_path(conversation))?)?;
+            verdicts.extend(judge_conversation(&judge, conversation, &questions, &transcript).await?);
+        }
+        if record {
+            set.save_recorded(&verdicts)?;
+        }
+        (verdicts, "asked the judge model again")
+    } else {
+        (set.recorded.clone(), "recorded (recorded.json)")
+    };
+    let agreement = calibration::agreement(&set.items, &verdicts);
+    print!("{}", agreement.report(source));
+    agreement.check(calibration::MIN_KAPPA, calibration::MIN_COMPARED).map_err(anyhow::Error::msg)
+}
+
+fn label(dir: &Option<PathBuf>) -> Result<()> {
+    use std::io::{BufRead, Write};
+    let mut set = calibration::Set::load(&calibration_dir(dir))?;
+    let todo: Vec<usize> = (0..set.items.len()).filter(|&i| set.items[i].human.is_none()).collect();
+    eprintln!("{} of {} items to label. The judge's verdicts are not shown.", todo.len(), set.items.len());
+    let stdin = std::io::stdin();
+    let mut lines = stdin.lock().lines();
+    let mut shown = None;
+    for (n, i) in todo.iter().enumerate() {
+        let item = set.items[*i].clone();
+        if shown.as_deref() != Some(item.conversation.as_str()) {
+            let transcript = Transcript::from_jsonl(&std::fs::read_to_string(set.conversation_path(&item.conversation))?)?;
+            println!("\n================ {} ================\n{}", item.conversation, render(&transcript));
+            shown = Some(item.conversation.clone());
+        }
+        let answer = loop {
+            print!("\n[{}/{}] {}: {}\n(p)ass, (f)ail, (u)nsure, (s)kip, (q)uit > ", n + 1, todo.len(), item.criterion, item.question);
+            std::io::stdout().flush()?;
+            let Some(line) = lines.next() else { return Ok(()) };
+            match line?.trim() {
+                "p" => break Some(calibration::Label::Pass),
+                "f" => break Some(calibration::Label::Fail),
+                "u" => break Some(calibration::Label::Unsure),
+                "s" => break None,
+                "q" => return Ok(()),
+                _ => continue,
+            }
+        };
+        if let Some(label) = answer {
+            set.items[*i].human = Some(label);
+            set.save_labels()?;
+        }
+    }
+    eprintln!("done; check agreement with `onto-eval --calibrate`");
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    if let Some(dir) = &args.label {
+        return label(dir);
+    }
+    if let Some(dir) = &args.calibrate {
+        return calibrate(dir, args.live, args.record).await;
+    }
     if let Some(paths) = &args.compare {
         let load = |p: &PathBuf| -> Result<Vec<RunResult>> { Ok(serde_json::from_str(&std::fs::read_to_string(p)?)?) };
         let name = |p: &PathBuf| p.parent().and_then(|d| d.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.display().to_string());
